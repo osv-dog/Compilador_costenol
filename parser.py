@@ -1,6 +1,7 @@
 # Analizador Sintáctico y Semántico
 import re
 import ply.yacc as yacc
+from tkinter import simpledialog, messagebox
 from lexer import tokens, lexer, palabras_reservadas_minusculas
 from simbolos import TablaDeSimbolos
 
@@ -17,6 +18,29 @@ precedence = (
 )
 
 PATRON_ID_SUELTO = re.compile(r'^[A-Za-z_]\w*$')
+
+
+def pedir_captura(tipo):
+    titulo = f"Captura — {tipo}"
+    mensaje = f"Ingresa un valor de tipo {tipo}:"
+
+    if tipo == 'Texto':
+        valor = simpledialog.askstring(titulo, mensaje)
+        return valor if valor is not None else ''
+
+    elif tipo == 'Entero':
+        valor = simpledialog.askinteger(titulo, mensaje)
+        return valor if valor is not None else 0
+
+    elif tipo == 'Real':
+        valor = simpledialog.askfloat(titulo, mensaje)
+        return valor if valor is not None else 0.0
+
+    elif tipo == 'Logico':
+        respuesta = messagebox.askyesno(titulo, "¿Verdadero o Falso?\n  Sí = Verdadero\n  No = Falso")
+        return respuesta
+
+    return None
 
 
 def validar_sentencias_incompletas(codigo):
@@ -112,16 +136,22 @@ def p_asignacion_captura(p):
 
     if not tabla.existe(nombre):
         tabla._error(f"Variable '{nombre}' no declarada antes de Captura", linea)
-    else:
-        info = tabla.tabla[nombre]
-        if info['tipo'] != tipo_captura:
-            tabla._error(
-                f"Tipo incompatible en Captura: '{nombre}' es '{info['tipo']}' "
-                f"pero Captura devuelve '{tipo_captura}'",
-                linea
-            )
-        else:
-            tabla.tabla[nombre]['valor'] = f'<Captura.{tipo_captura}>'
+        p[0] = ('captura_asignacion', nombre, tipo_captura)
+        return
+
+    info = tabla.tabla[nombre]
+    if info['tipo'] != tipo_captura:
+        tabla._error(
+            f"Tipo incompatible en Captura: '{nombre}' es '{info['tipo']}' "
+            f"pero Captura devuelve '{tipo_captura}'",
+            linea
+        )
+        p[0] = ('captura_asignacion', nombre, tipo_captura)
+        return
+
+    # Mostrar ventana emergente y guardar el valor real ingresado
+    valor = pedir_captura(tipo_captura)
+    tabla.tabla[nombre]['valor'] = valor
 
     p[0] = ('captura_asignacion', nombre, tipo_captura)
 
@@ -285,7 +315,10 @@ def p_error(p):
             p.lineno
         )
     else:
-        tabla._error("Error sintáctico: fin de archivo inesperado")
+        tabla._error(
+            "Error sintáctico: fin de archivo inesperado — "
+            "posiblemente falta ';' al final de la última sentencia"
+        )
 
 
 parser = yacc.yacc()
