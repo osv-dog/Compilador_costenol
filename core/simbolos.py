@@ -1,3 +1,7 @@
+class ErrorCompilacion(Exception):
+    """Excepción interna para detener la compilación tras el primer error."""
+
+
 class TablaDeSimbolos:
 
     TIPOS_VALIDOS = {"Entero", "Real", "Texto", "Logico"}
@@ -88,6 +92,7 @@ class TablaDeSimbolos:
         loc = f" (línea {linea})" if linea else ""
         entrada = f"Error semántico{loc}: {mensaje}"
         self.errores.append(entrada)
+        raise ErrorCompilacion(entrada)
 
     def tiene_errores(self) -> bool:
         return len(self.errores) > 0

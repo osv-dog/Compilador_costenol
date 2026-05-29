@@ -103,6 +103,7 @@ class VentanaCompilador(QMainWindow):
         # ── Compilar
         m_comp = mb.addMenu("Compilar")
         m_comp.addAction(self._accion("Compilar", self.compilar, "F5"))
+        m_comp.addAction(self._accion("Ejecutar", self.ejecutar, "F9"))
         m_comp.addAction(self._accion("Limpiar", self.limpiar_todo, "F6"))
 
         # ── Ver
@@ -153,11 +154,15 @@ class VentanaCompilador(QMainWindow):
         self._btn_compilar = self._boton_toolbar(
             "▶  Compilar  F5", c["btn_compilar"], c["btn_compilar_hover"], self.compilar
         )
+        self._btn_ejecutar = self._boton_toolbar(
+            "▶  Ejecutar  F9", c["btn_compilar"], c["btn_compilar_hover"], self.ejecutar
+        )
         self._btn_limpiar = self._boton_toolbar(
             "🗑  Limpiar", c["btn_limpiar"], c["btn_limpiar_hover"], self.limpiar_todo
         )
 
         self._toolbar.addWidget(self._btn_compilar)
+        self._toolbar.addWidget(self._btn_ejecutar)
         self._toolbar.addWidget(self._btn_limpiar)
 
         # Botón tema
@@ -796,6 +801,12 @@ class VentanaCompilador(QMainWindow):
     # ── Compilación ───────────────────────────────────────────────────────────
 
     def compilar(self):
+        self._ejecutar_fuente(modo="Compilar")
+
+    def ejecutar(self):
+        self._ejecutar_fuente(modo="Ejecutar")
+
+    def _ejecutar_fuente(self, modo: str):
         from core.parser import compilar as compilar_codigo
         from core.lexer import tokenizar
 
@@ -814,10 +825,19 @@ class VentanaCompilador(QMainWindow):
 
         self.editor_mgr.limpiar_errores()
 
-        resultado = compilar_codigo(codigo)
+        resultado = compilar_codigo(codigo, ejecutar=(modo == "Ejecutar"))
         self._mostrar_resultado(resultado)
         self._mostrar_tabla(resultado["tabla"])
         self._mostrar_tokens(codigo)
+
+        if resultado["exito"]:
+            if modo == "Ejecutar":
+                self._lbl_compilacion.setText("▶ Ejecución completa")
+            else:
+                self._lbl_compilacion.setText("✔ Compilación exitosa")
+            self._lbl_compilacion.setStyleSheet(
+                f"color:{C()['status_ok']}; font-family:'Segoe UI'; font-size:9pt; background:transparent;"
+            )
 
         n_vars = len(resultado["tabla"])
         self._lbl_vars.setStyleSheet(

@@ -4,10 +4,180 @@ import ply.yacc as yacc
 from tkinter import simpledialog, messagebox
 
 from core.lexer import tokens, lexer, palabras_reservadas_minusculas  # noqa: F401
-from core.simbolos import TablaDeSimbolos
+from core.simbolos import ErrorCompilacion, TablaDeSimbolos
 
 tabla = TablaDeSimbolos()
 salida_programa: list[str] = []
+
+# ── Helpers para AST y evaluación ────────────────────────────────────────────
+
+
+def tipo_expresion(expr):
+    if expr is None:
+        return None
+
+    if isinstance(expr, tuple):
+        etiqueta = expr[0]
+
+        if etiqueta == "id_ref":
+            nombre = expr[1]
+            linea = expr[2] if len(expr) > 2 else 0
+            info = tabla.buscar(nombre, linea)
+            return info["tipo"] if info else None
+
+        if etiqueta == "binop":
+            op, izquierda, derecha = expr[1], expr[2], expr[3]
+            tipo_izq = tipo_expresion(izquierda)
+            tipo_der = tipo_expresion(derecha)
+            if tipo_izq is None or tipo_der is None:
+                return None
+
+            if op in {"+", "-", "*", "/"}:
+                if tipo_izq == "Texto" or tipo_der == "Texto":
+                    if op == "+":
+                        return "Texto"
+                    tabla._error(
+                        f"Operador '{op}' no es válido para tipos Texto",
+                        0,
+                    )
+                    return None
+                if tipo_izq == "Real" or tipo_der == "Real":
+                    return "Real"
+                return "Entero"
+
+            if op in {"==", "!=", "<", ">", "<=", ">="}:
+                return "Logico"
+
+            if op in {"&&", "||"}:
+                return "Logico"
+
+        if etiqueta == "not":
+            tipo = tipo_expresion(expr[1])
+            if tipo != "Logico":
+                tabla._error(
+                    "Operador '!' requiere una expresión Lógica",
+                    0,
+                )
+                return None
+            return "Logico"
+
+        return None
+
+    return TablaDeSimbolos.tipo_de_literal(expr)
+
+
+def evaluar_expresion(expr):
+    if expr is None:
+        return None
+
+    if isinstance(expr, tuple):
+        etiqueta = expr[0]
+
+        if etiqueta == "id_ref":
+            nombre = expr[1]
+            linea = expr[2] if len(expr) > 2 else 0
+            info = tabla.buscar(nombre, linea)
+            return info["valor"] if info else None
+
+        if etiqueta == "binop":
+            op, izquierda, derecha = expr[1], expr[2], expr[3]
+            valor_izq = evaluar_expresion(izquierda)
+            valor_der = evaluar_expresion(derecha)
+            if valor_izq is None or valor_der is None:
+                return None
+
+            if op == "+":
+                if isinstance(valor_izq, (int, float)) and isinstance(
+                    valor_der, (int, float)
+                ):
+                    return valor_izq + valor_der
+                return str(valor_izq) + str(valor_der)
+            if op == "-":
+                return valor_izq - valor_der
+            if op == "*":
+                return valor_izq * valor_der
+            if op == "/":
+                if valor_der == 0:
+                    tabla._error("División por cero", 0)
+                    return 0
+                return valor_izq / valor_der
+            if op == "==":
+                return valor_izq == valor_der
+            if op == "!=":
+                return valor_izq != valor_der
+            if op == "<":
+                return valor_izq < valor_der
+            if op == ">":
+                return valor_izq > valor_der
+            if op == "<=":
+                return valor_izq <= valor_der
+            if op == ">=":
+                return valor_izq >= valor_der
+            if op == "&&":
+                return bool(valor_izq) and bool(valor_der)
+            if op == "||":
+                return bool(valor_izq) or bool(valor_der)
+
+        if etiqueta == "not":
+            return not bool(evaluar_expresion(expr[1]))
+
+        return None
+
+    return expr
+
+
+def evaluar_argumento(arg):
+    if isinstance(arg, tuple) and arg[0] == "id_ref":
+        linea = arg[2] if len(arg) > 2 else 0
+        info = tabla.buscar(arg[1], linea)
+        return info["valor"] if info else None
+    return arg
+
+
+def ejecutar_ast(ast):
+    if isinstance(ast, tuple) and ast and ast[0] == "programa":
+        ast = ast[1]
+
+    for sentencia in ast:
+        if sentencia[0] == "declaracion":
+            continue
+
+        if sentencia[0] == "asignacion":
+            nombre, expr = sentencia[1], sentencia[2]
+            valor = evaluar_expresion(expr)
+            if tabla.tiene_errores():
+                return
+            tabla.tabla[nombre]["valor"] = valor
+            continue
+
+        if sentencia[0] == "captura_asignacion":
+            nombre, tipo_captura = sentencia[1], sentencia[2]
+            valor = pedir_captura(tipo_captura)
+            tabla.tabla[nombre]["valor"] = valor
+            continue
+
+        if sentencia[0] == "impresion":
+            args = sentencia[1]
+            partes = []
+            for arg in args:
+                if isinstance(arg, tuple) and arg[0] == "id_ref":
+                    linea = arg[2] if len(arg) > 2 else 0
+                    info = tabla.buscar(arg[1], linea)
+                    if info:
+                        partes.append(
+                            str(info["valor"])
+                            if info["valor"] is not None
+                            else f"<{arg[1]}>"
+                        )
+                    else:
+                        partes.append(f"<{arg[1]}:no declarada>")
+                else:
+                    partes.append(str(arg))
+            salida_programa.append(" ".join(partes))
+            continue
+
+    return
+
 
 # ── Precedencia de operadores (menor → mayor prioridad) ───────────────────────
 precedence = (
@@ -183,19 +353,23 @@ def p_tipo_logico(p):
 def p_asignacion_expresion(p):
     """asignacion : ID IGUAL expresion PUNTO_COMA"""
     nombre = p[1]
-    valor = p[3]
+    expresion = p[3]
     linea = p.lineno(1)
 
-    if valor is None:
+    if expresion is None:
         p[0] = ("asignacion_error", nombre)
         return
 
-    tipo_val = tabla.tipo_de_literal(valor)
+    tipo_val = tipo_expresion(expresion)
     if tipo_val is None:
-        tipo_val = "Texto"
+        p[0] = ("asignacion_error", nombre)
+        return
 
-    tabla.asignar(nombre, tipo_val, valor, linea)
-    p[0] = ("asignacion", nombre, valor)
+    if not tabla.asignar(nombre, tipo_val, None, linea):
+        p[0] = ("asignacion_error", nombre)
+        return
+
+    p[0] = ("asignacion", nombre, expresion)
 
 
 def p_asignacion_captura(p):
@@ -219,9 +393,7 @@ def p_asignacion_captura(p):
         p[0] = ("captura_asignacion_error", nombre)
         return
 
-    valor = pedir_captura(tipo_captura)
-    tabla.tabla[nombre]["valor"] = valor
-    p[0] = ("captura_asignacion", nombre, tipo_captura, valor)
+    p[0] = ("captura_asignacion", nombre, tipo_captura)
 
 
 def p_captura(p):
@@ -234,27 +406,7 @@ def p_captura(p):
 
 def p_impresion(p):
     """impresion : MENSAJE PUNTO TEXTO_T PAREN_IZQ argumentos PAREN_DER PUNTO_COMA"""
-    args = p[5]
-    linea = p.lineno(1)
-    partes = []
-
-    for arg in args:
-        if isinstance(arg, tuple) and arg[0] == "id_ref":
-            nombre_var = arg[1]
-            info = tabla.buscar(nombre_var, linea)
-            if info:
-                partes.append(
-                    str(info["valor"])
-                    if info["valor"] is not None
-                    else f"<{nombre_var}>"
-                )
-            else:
-                partes.append(f"<{nombre_var}:no declarada>")
-        else:
-            partes.append(str(arg))
-
-    salida_programa.append(" ".join(partes))
-    p[0] = ("impresion", args)
+    p[0] = ("impresion", p[5])
 
 
 def p_argumentos_multiples(p):
@@ -283,15 +435,12 @@ def p_argumento_id(p):
 def p_expresion_logica(p):
     """expresion : expresion Y expresion
     | expresion O expresion"""
-    if p[2] == "&&":
-        p[0] = bool(p[1]) and bool(p[3])
-    else:
-        p[0] = bool(p[1]) or bool(p[3])
+    p[0] = ("binop", p[2], p[1], p[3])
 
 
 def p_expresion_no(p):
     """expresion : NO expresion"""
-    p[0] = not bool(p[2])
+    p[0] = ("not", p[2])
 
 
 def p_expresion_relacional(p):
@@ -301,29 +450,13 @@ def p_expresion_relacional(p):
     | expresion MAYOR       expresion
     | expresion MENOR_IGUAL expresion
     | expresion MAYOR_IGUAL expresion"""
-    op = p[2]
-    ops = {
-        "==": lambda a, b: a == b,
-        "!=": lambda a, b: a != b,
-        "<": lambda a, b: a < b,
-        ">": lambda a, b: a > b,
-        "<=": lambda a, b: a <= b,
-        ">=": lambda a, b: a >= b,
-    }
-    p[0] = ops[op](p[1], p[3])
+    p[0] = ("binop", p[2], p[1], p[3])
 
 
 def p_expresion_binaria(p):
     """expresion : expresion MAS   termino
     | expresion MENOS termino"""
-    if p[2] == "+":
-        # Concatenación si alguno es texto, suma aritmética si ambos son números
-        if isinstance(p[1], (int, float)) and isinstance(p[3], (int, float)):
-            p[0] = p[1] + p[3]
-        else:
-            p[0] = str(p[1]) + str(p[3])
-    else:
-        p[0] = p[1] - p[3]
+    p[0] = ("binop", p[2], p[1], p[3])
 
 
 def p_expresion_termino(p):
@@ -334,14 +467,7 @@ def p_expresion_termino(p):
 def p_termino_binario(p):
     """termino : termino POR   factor
     | termino ENTRE factor"""
-    if p[2] == "*":
-        p[0] = p[1] * p[3]
-    else:
-        if p[3] == 0:
-            tabla._error("División por cero", p.lineno(2))
-            p[0] = 0
-        else:
-            p[0] = p[1] / p[3]
+    p[0] = ("binop", p[2], p[1], p[3])
 
 
 def p_termino_factor(p):
@@ -388,8 +514,7 @@ def p_factor_id(p):
         p[0] = None
         return
 
-    info = tabla.buscar(nombre, linea)
-    p[0] = info["valor"] if (info and info["valor"] is not None) else None
+    p[0] = ("id_ref", nombre, linea)
 
 
 def p_factor_paren(p):
@@ -414,13 +539,13 @@ def p_error(p):
 
 
 # Instancia global del parser
-parser = yacc.yacc()
+parser = yacc.yacc(write_tables=False)
 
 
 # ── Punto de entrada ──────────────────────────────────────────────────────────
 
 
-def compilar(codigo: str) -> dict:
+def compilar(codigo: str, ejecutar: bool = False) -> dict:
     """
     Compila un programa Costeñol y retorna un diccionario con:
         - exito   : bool
@@ -433,20 +558,21 @@ def compilar(codigo: str) -> dict:
     salida_programa.clear()
     lexer.lineno = 1
 
-    codigo_limpio = validar_sentencias_incompletas(codigo)
-    lexer.lineno = 1
+    try:
+        codigo_limpio = validar_sentencias_incompletas(codigo)
+        lexer.lineno = 1
 
-    # Si la validación previa ya encontró un error, no continuar
-    if tabla.tiene_errores():
-        return {
-            "exito": False,
-            "ast": None,
-            "errores": list(tabla.errores),
-            "salida": [],
-            "tabla": dict(tabla.tabla),
-        }
+        # Si la validación previa ya encontró un error, no continuar
+        if tabla.tiene_errores():
+            raise ErrorCompilacion("Error previo detectado")
 
-    ast = parser.parse(codigo_limpio, lexer=lexer)
+        ast = parser.parse(codigo_limpio, lexer=lexer)
+
+        if ejecutar and not tabla.tiene_errores() and ast is not None:
+            ejecutar_ast(ast)
+
+    except ErrorCompilacion:
+        ast = None
 
     return {
         "exito": not tabla.tiene_errores() and ast is not None,
