@@ -1,0 +1,14 @@
+edad Entero;
+nombre Texto;
+activo Logico;
+pi Real;
+
+edad = 20;
+nombre = "Carlos";
+activo = Verdadero;
+pi = 3,1416;
+
+Mensaje.Texto("Nombre:", nombre);
+Mensaje.Texto("Edad:", edad);
+Mensaje.Texto("Activo:", activo);
+Mensaje.Texto("Pi vale:", pi);

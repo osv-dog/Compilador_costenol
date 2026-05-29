@@ -1,0 +1,19 @@
+num1 Entero;
+num2 Entero;
+suma Entero;
+resta Entero;
+producto Entero;
+resultado Real;
+
+num1 = 10;
+num2 = 4;
+
+suma = num1 + num2;
+resta = num1 - num2;
+producto = num1 * num2;
+resultado = num1 / num2;
+
+Mensaje.Texto("Suma:", suma);
+Mensaje.Texto("Resta:", resta);
+Mensaje.Texto("Producto:", producto);
+Mensaje.Texto("Division:", resultado);

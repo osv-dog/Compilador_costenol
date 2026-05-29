@@ -1,7 +1,22 @@
+# Entornos virtuales
 .venv/
 venv/
 env/
-__pycache__/
 
+# Cache de Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# IDEs
+.vscode/
+.idea/
+
+# Archivos generados por PLY (compilador)
 parser.out
 parsetab.py
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

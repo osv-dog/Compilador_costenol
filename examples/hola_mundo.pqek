@@ -1,0 +1,8 @@
+nombre Texto;
+saludo Texto;
+
+nombre = "Maria";
+saludo = "Hola mundo";
+
+Mensaje.Texto(saludo);
+Mensaje.Texto("Bienvenido,", nombre);
