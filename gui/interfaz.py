@@ -12,8 +12,6 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QSplitter,
-    QTreeWidget,
-    QTreeWidgetItem,
     QTabWidget,
     QLabel,
     QPushButton,
@@ -27,7 +25,6 @@ from PyQt6.QtWidgets import (
     QFrame,
     QToolBar,
     QSizePolicy,
-    QScrollArea,
 )
 
 from gui.temas import (
@@ -41,6 +38,7 @@ from gui.temas import (
     MENSAJE_SIN_CODIGO,
 )
 from gui.editor import GestorPestanas
+from gui.explorador import PanelExplorador
 
 # ── Helpers de formato de texto ───────────────────────────────────────────────
 
@@ -108,6 +106,9 @@ class VentanaCompilador(QMainWindow):
 
         # ── Ver
         m_ver = mb.addMenu("Ver")
+        m_ver.addAction(
+            self._accion("Alternar explorador", self._toggle_explorador, "Ctrl+B")
+        )
         m_ver.addAction(
             self._accion("Alternar tema", self._alternar_tema, "Ctrl+Shift+T")
         )
@@ -224,8 +225,12 @@ class VentanaCompilador(QMainWindow):
         self._splitter.setHandleWidth(5)
         layout.addWidget(self._splitter)
 
-        # Explorador
-        self._construir_explorador()
+        # ── Explorador ────────────────────────────────────────────────────────
+        self._explorador = PanelExplorador()
+        self._explorador.archivo_abierto.connect(self._abrir_archivo_desde_explorador)
+        self._explorador.visibilidad_cambiada.connect(self._on_explorador_toggle)
+        self._explorador.cargar_carpeta_examples()
+        self._splitter.addWidget(self._explorador)
 
         # Editor
         self.editor_mgr = GestorPestanas(self._splitter, self)
@@ -234,119 +239,30 @@ class VentanaCompilador(QMainWindow):
         # Panel resultados
         self._construir_panel_resultados()
 
-        self._splitter.setSizes([220, 700, 380])
-        self._splitter.setStretchFactor(0, 0)
-        self._splitter.setStretchFactor(1, 1)
-        self._splitter.setStretchFactor(2, 0)
+        # El splitter controla el ancho del explorador (resize libre).
+        # El PanelExplorador ya tiene setMinimumWidth(ANCHO_BARRA=42) internamente,
+        # y su _panel tiene min=160 / max=600, por lo que el splitter respeta esos límites.
+        self._splitter.setSizes([282, 700, 380])
+        self._splitter.setStretchFactor(0, 0)  # explorador: no crece solo
+        self._splitter.setStretchFactor(1, 1)  # editor: absorbe el espacio libre
+        self._splitter.setStretchFactor(2, 0)  # resultados: no crece solo
 
-    # ── Explorador de archivos ────────────────────────────────────────────────
+    def _on_explorador_toggle(self, expandido: bool):
+        """Cuando el panel se colapsa/expande ajusta el splitter."""
+        sizes = self._splitter.sizes()
+        if expandido:
+            # Restaurar al ancho por defecto si venía colapsado
+            self._splitter.setSizes([282, sizes[1] + sizes[0] - 282, sizes[2]])
+        else:
+            # Dejar solo la barra de iconos (42 px)
+            from gui.explorador import ANCHO_BARRA
 
-    def _construir_explorador(self):
-        c = C()
-        self._explorador_frame = QWidget()
-        self._explorador_frame.setFixedWidth(240)
-        lay = QVBoxLayout(self._explorador_frame)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(0)
-
-        self._lbl_explorador = QLabel("  EXPLORADOR")
-        self._lbl_explorador.setFixedHeight(36)
-        self._lbl_explorador.setStyleSheet(
-            f"background:{c['panel']}; color:{c['tab_fg_act']};"
-            "font-family:'Segoe UI'; font-size:9pt; font-weight:bold;"
-            f"border-bottom:1px solid {c['borde']};"
-        )
-        lay.addWidget(self._lbl_explorador)
-
-        self._tree_explorer = QTreeWidget()
-        self._tree_explorer.setHeaderHidden(True)
-        self._tree_explorer.setRootIsDecorated(True)
-        self._tree_explorer.itemDoubleClicked.connect(self._on_explorer_activate)
-        lay.addWidget(self._tree_explorer)
-
-        self._splitter.addWidget(self._explorador_frame)
-        self._estilizar_explorador()
-        self._cargar_explorador()
-
-    def _estilizar_explorador(self):
-        c = C()
-        self._explorador_frame.setStyleSheet(
-            f"background:{c['panel']}; border-right:1px solid {c['borde']};"
-        )
-        self._tree_explorer.setStyleSheet(f"""
-            QTreeWidget {{
-                background: {c['panel']};
-                color: {c['tabla_fg']};
-                border: none;
-                font-family: 'Segoe UI';
-                font-size: 9pt;
-                outline: none;
-            }}
-            QTreeWidget::item {{
-                padding: 3px 6px;
-                border: none;
-            }}
-            QTreeWidget::item:selected {{
-                background: {c['seleccion']};
-                color: {c['tab_fg_act']};
-                border-radius: 4px;
-            }}
-            QTreeWidget::item:hover {{
-                background: {c['borde']};
-            }}
-        """)
-
-    def _cargar_explorador(self):
-        self._tree_explorer.clear()
-        examples_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "examples")
-        )
-        root_item = QTreeWidgetItem(self._tree_explorer, ["examples"])
-        root_item.setData(0, Qt.ItemDataRole.UserRole, examples_dir)
-        self._agregar_items_explorador(root_item, examples_dir)
-        root_item.setExpanded(True)
-
-    def _agregar_items_explorador(self, parent, ruta: str):
-        try:
-            nombres = sorted(os.listdir(ruta), key=str.lower)
-        except OSError:
-            return
-        for nombre in nombres:
-            abs_path = os.path.join(ruta, nombre)
-            item = QTreeWidgetItem(parent, [nombre])
-            item.setData(0, Qt.ItemDataRole.UserRole, abs_path)
-            if os.path.isdir(abs_path):
-                self._agregar_items_explorador(item, abs_path)
-
-    def _on_explorer_activate(self, item: QTreeWidgetItem, _col: int):
-        ruta = item.data(0, Qt.ItemDataRole.UserRole)
-        if not ruta:
-            return
-        if os.path.isdir(ruta):
-            item.setExpanded(not item.isExpanded())
-            return
-        self._abrir_archivo_desde_explorador(ruta)
-
-    def _abrir_archivo_desde_explorador(self, ruta: str):
-        if self._seleccionar_tab_por_ruta(ruta):
-            return
-        try:
-            with open(ruta, encoding="utf-8") as f:
-                contenido = f.read()
-            self.editor_mgr.nueva_pestana(
-                nombre=os.path.basename(ruta),
-                contenido=contenido,
-                ruta=ruta,
+            self._splitter.setSizes(
+                [ANCHO_BARRA, sizes[1] + sizes[0] - ANCHO_BARRA, sizes[2]]
             )
-        except Exception as e:
-            QMessageBox.critical(self, "Error al abrir", str(e))
 
-    def _seleccionar_tab_por_ruta(self, ruta: str) -> bool:
-        for tid, datos in self.editor_mgr.pestanas.items():
-            if datos.get("ruta") == ruta:
-                self.editor_mgr.seleccionar(tid)
-                return True
-        return False
+    def _toggle_explorador(self):
+        self._explorador._toggle()
 
     # ── Panel de resultados ───────────────────────────────────────────────────
 
@@ -624,7 +540,6 @@ class VentanaCompilador(QMainWindow):
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
                 width: 0;
             }}
-            /* Evitar que cualquier regla ancestro tape el syntax highlighter */
             QPlainTextEdit {{
                 border: none;
             }}
@@ -654,10 +569,7 @@ class VentanaCompilador(QMainWindow):
         self._lbl_titulo.setStyleSheet(
             f"color: {c['titulo_fg']}; font-family: 'Segoe UI'; font-size: 14pt; font-weight: bold;"
         )
-        self._btn_compilar.setStyleSheet(
-            self._btn_compilar.styleSheet().replace(
-                self._btn_compilar.styleSheet(),
-                f"""
+        self._btn_compilar.setStyleSheet(f"""
             QPushButton {{
                 background: {c['btn_compilar']};
                 color: #ffffff;
@@ -671,9 +583,22 @@ class VentanaCompilador(QMainWindow):
             QPushButton:hover {{
                 background: {c['btn_compilar_hover']};
             }}
-        """,
-            )
-        )
+        """)
+        self._btn_ejecutar.setStyleSheet(f"""
+            QPushButton {{
+                background: {c['btn_compilar']};
+                color: #ffffff;
+                border: none;
+                border-radius: 6px;
+                padding: 7px 16px;
+                font-family: 'Segoe UI';
+                font-size: 9pt;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: {c['btn_compilar_hover']};
+            }}
+        """)
         self._btn_limpiar.setStyleSheet(f"""
             QPushButton {{
                 background: {c['btn_limpiar']};
@@ -692,12 +617,7 @@ class VentanaCompilador(QMainWindow):
         self._estilizar_btn_tema()
 
         # Explorador
-        self._estilizar_explorador()
-        self._lbl_explorador.setStyleSheet(
-            f"background:{c['panel']}; color:{c['tab_fg_act']};"
-            "font-family:'Segoe UI'; font-size:9pt; font-weight:bold;"
-            f"border-bottom:1px solid {c['borde']};"
-        )
+        self._explorador.aplicar_tema()
 
         # Editor
         self.editor_mgr.aplicar_tema()
@@ -893,6 +813,29 @@ class VentanaCompilador(QMainWindow):
         )
         self._lbl_vars.setText("Variables: 0")
 
+    # ── Explorador: abrir archivo ─────────────────────────────────────────────
+
+    def _abrir_archivo_desde_explorador(self, ruta: str):
+        if self._seleccionar_tab_por_ruta(ruta):
+            return
+        try:
+            with open(ruta, encoding="utf-8") as f:
+                contenido = f.read()
+            self.editor_mgr.nueva_pestana(
+                nombre=os.path.basename(ruta),
+                contenido=contenido,
+                ruta=ruta,
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error al abrir", str(e))
+
+    def _seleccionar_tab_por_ruta(self, ruta: str) -> bool:
+        for tid, datos in self.editor_mgr.pestanas.items():
+            if datos.get("ruta") == ruta:
+                self.editor_mgr.seleccionar(tid)
+                return True
+        return False
+
     # ── Renderizado de resultados ─────────────────────────────────────────────
 
     def _mostrar_resultado(self, resultado: dict):
@@ -985,8 +928,6 @@ class VentanaCompilador(QMainWindow):
         self.texto_tokens.setHtml(
             f'<pre style="font-family:Cascadia Code,monospace">{cab}{sep}{rows}</pre>'
         )
-
-    # ── Ejemplo inicial ───────────────────────────────────────────────────────
 
 
 # ── Punto de entrada ──────────────────────────────────────────────────────────
