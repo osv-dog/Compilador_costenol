@@ -1,21 +1,18 @@
 # gui/panel_resultados.py — Panel derecho del IDE Costeñol (consola, símbolos, tokens)
 import re
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import (
     QColor,
     QFont,
     QTextCursor,
-    QTextCharFormat,
 )
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QTextEdit,
-    QTabWidget,
     QLabel,
-    QPushButton,
     QFrame,
     QTableWidget,
     QTableWidgetItem,
@@ -23,10 +20,15 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QToolButton,
     QAbstractItemView,
-    QScrollArea,
+    QStackedWidget,
 )
 
 from gui.temas import C, FUENTES
+
+ANCHO_PANEL_MIN = 260
+ANCHO_PANEL_MAX = 700
+ANCHO_PANEL_DEFAULT = 380
+
 
 # ── Utilidades HTML ───────────────────────────────────────────────────────────
 
@@ -39,10 +41,7 @@ def _esc(texto: str) -> str:
 
 
 class ConsolaWidget(QWidget):
-    """
-    Consola estilo terminal. Usa QTextEdit con HTML para evitar el loop
-    que provoca QSyntaxHighlighter al adjuntarse al documento.
-    """
+    """Solo muestra salida y errores con apariencia de terminal. No es funcional."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -56,17 +55,13 @@ class ConsolaWidget(QWidget):
         self._cabecera = self._construir_cabecera()
         layout.addWidget(self._cabecera)
 
-        # QTextEdit con HTML — sin QSyntaxHighlighter, sin loops
         self._texto = QTextEdit()
         self._texto.setReadOnly(True)
         self._texto.setFont(QFont(FUENTES["codigo"][0], FUENTES["codigo"][1] - 1))
         layout.addWidget(self._texto)
 
-        self._pie = self._construir_pie()
-        layout.addWidget(self._pie)
-
         self._aplicar_estilos()
-        self._mostrar_bienvenida()
+        self._limpiar_contenido()
 
     def _construir_cabecera(self) -> QWidget:
         cab = QFrame()
@@ -74,14 +69,6 @@ class ConsolaWidget(QWidget):
         lay = QHBoxLayout(cab)
         lay.setContentsMargins(12, 0, 8, 0)
         lay.setSpacing(8)
-
-        for color in ["#FF5F57", "#FEBC2E", "#28C840"]:
-            dot = QLabel("●")
-            dot.setFixedWidth(14)
-            dot.setStyleSheet(f"color: {color}; font-size: 10pt;")
-            lay.addWidget(dot)
-
-        lay.addSpacing(8)
 
         self._lbl_proceso = QLabel("costeñol — resultado")
         lay.addWidget(self._lbl_proceso)
@@ -104,34 +91,6 @@ class ConsolaWidget(QWidget):
         lay.addWidget(self._btn_copiar)
 
         return cab
-
-    def _construir_pie(self) -> QWidget:
-        pie = QFrame()
-        pie.setFixedHeight(26)
-        lay = QHBoxLayout(pie)
-        lay.setContentsMargins(12, 0, 12, 0)
-        lay.setSpacing(0)
-
-        self._lbl_prompt = QLabel("costenol@ide:~$")
-        lay.addWidget(self._lbl_prompt)
-
-        self._lbl_cursor = QLabel("█")
-        lay.addWidget(self._lbl_cursor)
-        lay.addStretch()
-
-        self._lbl_lineas = QLabel("0 líneas")
-        lay.addWidget(self._lbl_lineas)
-
-        self._timer_cursor = QTimer()
-        self._timer_cursor.timeout.connect(self._parpadear_cursor)
-        self._timer_cursor.start(530)
-        self._cursor_visible = True
-
-        return pie
-
-    def _parpadear_cursor(self):
-        self._cursor_visible = not self._cursor_visible
-        self._lbl_cursor.setVisible(self._cursor_visible)
 
     def _aplicar_estilos(self):
         c = C()
@@ -182,41 +141,16 @@ class ConsolaWidget(QWidget):
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
         """)
-        self._pie.setStyleSheet(f"""
-            QFrame {{
-                background: {c['panel']};
-                border-top: 1px solid {c['borde']};
-            }}
-            QLabel {{
-                color: {c['subtitulo_fg']};
-                font-family: 'Cascadia Code', monospace;
-                font-size: 8pt;
-                background: transparent;
-            }}
-        """)
-        self._lbl_prompt.setStyleSheet(
-            f"color: {c['tag_exito']}; font-family: 'Cascadia Code', monospace; font-size: 8pt;"
-        )
-        self._lbl_cursor.setStyleSheet(
-            f"color: {c['cursor']}; font-family: 'Cascadia Code', monospace; font-size: 8pt;"
-        )
-        self._lbl_lineas.setStyleSheet(
-            f"color: {c['subtitulo_fg']}; font-family: 'Cascadia Code', monospace; font-size: 8pt;"
-        )
         self._lbl_estado.setStyleSheet(f"color: {c['subtitulo_fg']}; font-size: 8pt;")
 
     def aplicar_tema(self):
         self._aplicar_estilos()
-        self._mostrar_bienvenida()
 
     # ── Helpers HTML ──────────────────────────────────────────────────────────
 
     def _span(self, texto: str, color: str, bold: bool = False) -> str:
         w = "font-weight:bold;" if bold else ""
         return f'<span style="color:{color};{w}">{_esc(texto)}</span>'
-
-    def _sep(self, c: dict) -> str:
-        return f'<span style="color:{c["tag_sep"]}">{"─" * 52}</span><br>'
 
     def _set_html(self, html: str):
         c = C()
@@ -229,6 +163,9 @@ class ConsolaWidget(QWidget):
         )
         self._texto.moveCursor(QTextCursor.MoveOperation.End)
 
+    def _limpiar_contenido(self):
+        self._set_html("")
+
     # ── API pública ───────────────────────────────────────────────────────────
 
     def mostrar_resultado(self, resultado: dict):
@@ -237,53 +174,45 @@ class ConsolaWidget(QWidget):
         salida = resultado.get("salida", [])
         errores = resultado.get("errores", [])
 
-        html = self._sep(c)
+        html = ""
 
         if exito:
             html += (
-                self._span("  ✔  COMPILACIÓN EXITOSA", c["tag_exito"], bold=True)
-                + "<br>"
+                self._span("✔  COMPILACIÓN EXITOSA", c["tag_exito"], bold=True) + "<br>"
             )
         else:
             html += (
-                self._span("  ✘  ERRORES EN EL CÓDIGO", c["tag_error"], bold=True)
+                self._span("✘  ERRORES EN EL CÓDIGO", c["tag_error"], bold=True)
                 + "<br>"
             )
-        html += self._sep(c)
+
+        html += "<br>"
 
         if salida:
-            html += "<br>"
-            html += self._span("  SALIDA DEL PROGRAMA", c["tag_titulo"]) + "<br><br>"
+            html += self._span("SALIDA DEL PROGRAMA", c["tag_titulo"]) + "<br><br>"
             for s in salida:
                 html += (
-                    self._span("  ▸  ", c["tag_salida"])
+                    self._span("▸  ", c["tag_salida"])
                     + self._span(s, c["tag_salida"])
                     + "<br>"
                 )
-            html += "<br>" + self._sep(c)
+            html += "<br>"
 
         if errores:
-            html += "<br>"
-            html += self._span("  ERRORES DETECTADOS", c["tag_titulo"]) + "<br><br>"
+            html += self._span("ERRORES DETECTADOS", c["tag_titulo"]) + "<br><br>"
             for i, err in enumerate(errores, 1):
                 html += (
-                    self._span(f"  [{i}]  ", c["tag_num_error"], bold=True)
+                    self._span(f"[{i}]  ", c["tag_num_error"], bold=True)
                     + self._span(err, c["tag_error"])
                     + "<br>"
                 )
-            html += "<br>" + self._sep(c)
+            html += "<br>"
 
         if not salida and not errores:
-            html += (
-                "<br>"
-                + self._span("  (sin salida registrada)", c["tag_normal"])
-                + "<br>"
-            )
+            html += self._span("(sin salida registrada)", c["tag_normal"]) + "<br>"
 
         self._set_html(html)
 
-        n = self._texto.document().blockCount()
-        self._lbl_lineas.setText(f"{n} líneas")
         color_estado = c["tag_exito"] if exito else c["tag_error"]
         self._lbl_estado.setStyleSheet(f"color: {color_estado}; font-size: 8pt;")
         self._lbl_proceso.setText(
@@ -292,40 +221,20 @@ class ConsolaWidget(QWidget):
 
     def limpiar(self):
         c = C()
-        self._lbl_lineas.setText("0 líneas")
         self._lbl_estado.setStyleSheet(f"color: {c['subtitulo_fg']}; font-size: 8pt;")
         self._lbl_proceso.setText("costeñol — resultado")
-        self._mostrar_bienvenida()
+        self._limpiar_contenido()
 
     def _copiar(self):
         from PyQt6.QtWidgets import QApplication
 
         QApplication.clipboard().setText(self._texto.toPlainText())
 
-    def _mostrar_bienvenida(self):
-        c = C()
-        html = (
-            self._sep(c)
-            + self._span("  COSTEÑOL IDE", c["tag_exito"], bold=True)
-            + self._span("  —  Consola de salida", c["subtitulo_fg"])
-            + "<br>"
-            + self._sep(c)
-            + "<br>"
-            + self._span("  Presiona F5 para compilar", c["tag_normal"])
-            + "<br>"
-            + self._span("  Presiona F9 para compilar y ejecutar", c["tag_normal"])
-            + "<br>"
-            + "<br>"
-        )
-        self._set_html(html)
 
-
-# ── Tabla de símbolos mejorada ────────────────────────────────────────────────
+# ── Tabla de símbolos ─────────────────────────────────────────────────────────
 
 
 class TablaSimbolosWidget(QWidget):
-    """Tabla de símbolos con cabecera personalizada, filas alternas y búsqueda."""
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._construir()
@@ -335,7 +244,6 @@ class TablaSimbolosWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # ── Cabecera ──────────────────────────────────────────────────────────
         cab = QFrame()
         cab.setFixedHeight(38)
         cab_lay = QHBoxLayout(cab)
@@ -352,7 +260,6 @@ class TablaSimbolosWidget(QWidget):
         self._cab = cab
         layout.addWidget(cab)
 
-        # ── Tabla ─────────────────────────────────────────────────────────────
         cols = ["Variable", "Tipo", "Valor", "Línea"]
         self._tabla = QTableWidget(0, len(cols))
         self._tabla.setHorizontalHeaderLabels(cols)
@@ -368,14 +275,14 @@ class TablaSimbolosWidget(QWidget):
         self._tabla.horizontalHeader().setSectionResizeMode(
             3, QHeaderView.ResizeMode.ResizeToContents
         )
+        self._tabla.horizontalHeader().setStretchLastSection(True)
         self._tabla.verticalHeader().setVisible(False)
         self._tabla.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._tabla.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._tabla.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._tabla.setShowGrid(False)
         self._tabla.setAlternatingRowColors(True)
-        font = QFont(FUENTES["tokens"][0], FUENTES["tokens"][1])
-        self._tabla.setFont(font)
+        self._tabla.setFont(QFont(FUENTES["tokens"][0], FUENTES["tokens"][1]))
         self._tabla.verticalHeader().setDefaultSectionSize(32)
         layout.addWidget(self._tabla)
 
@@ -383,7 +290,6 @@ class TablaSimbolosWidget(QWidget):
 
     def _aplicar_estilos(self):
         c = C()
-
         self._cab.setStyleSheet(f"""
             QFrame {{
                 background: {c['panel']};
@@ -400,7 +306,6 @@ class TablaSimbolosWidget(QWidget):
         self._lbl_conteo.setStyleSheet(
             f"color: {c['subtitulo_fg']}; font-family: 'Cascadia Code', monospace; font-size: 8pt;"
         )
-
         self._tabla.setStyleSheet(f"""
             QTableWidget {{
                 background: {c['tabla_bg']};
@@ -451,23 +356,18 @@ class TablaSimbolosWidget(QWidget):
     def actualizar(self, tabla_dict: dict):
         c = C()
         self._tabla.setRowCount(0)
-
-        # Colores por tipo
         tipo_colores = {
             "Entero": c["syn_number"],
             "Real": c["syn_number"],
             "Texto": c["syn_string"],
             "Logico": c["syn_builtin"],
         }
-
         for var, info in tabla_dict.items():
             row = self._tabla.rowCount()
             self._tabla.insertRow(row)
-
             val = str(info["valor"]) if info["valor"] is not None else "—"
             tipo = info["tipo"]
             tipo_color = tipo_colores.get(tipo, c["tabla_fg"])
-
             datos = [
                 (var, c["tag_tok_tipo"], QFont.Weight.Bold),
                 (tipo, tipo_color, QFont.Weight.Normal),
@@ -478,7 +378,6 @@ class TablaSimbolosWidget(QWidget):
                 ),
                 (str(info["linea"]), c["subtitulo_fg"], QFont.Weight.Normal),
             ]
-
             for col, (texto, color, peso) in enumerate(datos):
                 item = QTableWidgetItem(texto)
                 item.setForeground(QColor(color))
@@ -489,7 +388,6 @@ class TablaSimbolosWidget(QWidget):
                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
                 )
                 self._tabla.setItem(row, col, item)
-
         n = len(tabla_dict)
         self._lbl_conteo.setText(f"{n} variable{'s' if n != 1 else ''}")
 
@@ -498,16 +396,10 @@ class TablaSimbolosWidget(QWidget):
         self._lbl_conteo.setText("0 variables")
 
 
-# ── Vista de tokens mejorada ──────────────────────────────────────────────────
+# ── Vista de tokens ───────────────────────────────────────────────────────────
 
 
 class TokensWidget(QWidget):
-    """
-    Vista de tokens con tabla real (no QTextEdit),
-    cabecera fija, conteo de tokens y colores por categoría.
-    """
-
-    # Categorías de tokens para colorear
     _CATEGORIAS = {
         "KEYWORD": "syn_keyword",
         "TYPE": "syn_type",
@@ -529,14 +421,13 @@ class TokensWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # ── Cabecera ──────────────────────────────────────────────────────────
         cab = QFrame()
         cab.setFixedHeight(38)
         cab_lay = QHBoxLayout(cab)
         cab_lay.setContentsMargins(12, 0, 8, 0)
         cab_lay.setSpacing(8)
 
-        lbl = QLabel("⟨/⟩  STREAM DE TOKENS")
+        lbl = QLabel("⟨/⟩ TOKENS")
         cab_lay.addWidget(lbl)
         cab_lay.addStretch()
 
@@ -546,7 +437,6 @@ class TokensWidget(QWidget):
         self._cab = cab
         layout.addWidget(cab)
 
-        # ── Tabla de tokens ───────────────────────────────────────────────────
         cols = ["#", "Línea", "Tipo", "Valor"]
         self._tabla = QTableWidget(0, len(cols))
         self._tabla.setHorizontalHeaderLabels(cols)
@@ -562,14 +452,14 @@ class TokensWidget(QWidget):
         self._tabla.horizontalHeader().setSectionResizeMode(
             3, QHeaderView.ResizeMode.Stretch
         )
+        self._tabla.horizontalHeader().setStretchLastSection(True)
         self._tabla.verticalHeader().setVisible(False)
         self._tabla.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._tabla.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._tabla.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._tabla.setShowGrid(False)
         self._tabla.setAlternatingRowColors(True)
-        font = QFont(FUENTES["tokens"][0], FUENTES["tokens"][1])
-        self._tabla.setFont(font)
+        self._tabla.setFont(QFont(FUENTES["tokens"][0], FUENTES["tokens"][1]))
         self._tabla.verticalHeader().setDefaultSectionSize(28)
         layout.addWidget(self._tabla)
 
@@ -577,7 +467,6 @@ class TokensWidget(QWidget):
 
     def _aplicar_estilos(self):
         c = C()
-
         self._cab.setStyleSheet(f"""
             QFrame {{
                 background: {c['panel']};
@@ -594,7 +483,6 @@ class TokensWidget(QWidget):
         self._lbl_conteo.setStyleSheet(
             f"color: {c['subtitulo_fg']}; font-family: 'Cascadia Code', monospace; font-size: 8pt;"
         )
-
         self._tabla.setStyleSheet(f"""
             QTableWidget {{
                 background: {c['tabla_bg']};
@@ -652,18 +540,14 @@ class TokensWidget(QWidget):
         self._aplicar_estilos()
 
     def actualizar(self, codigo: str):
-        """Tokeniza el código y actualiza la tabla."""
         from core.lexer import tokenizar
 
         c = C()
         lista = tokenizar(codigo)
         self._tabla.setRowCount(0)
-
         for i, (tipo, valor, linea) in enumerate(lista):
             row = self._tabla.rowCount()
             self._tabla.insertRow(row)
-
-            # Color según categoría del token
             tipo_upper = tipo.upper()
             color_key = None
             for cat, key in self._CATEGORIAS.items():
@@ -671,15 +555,12 @@ class TokensWidget(QWidget):
                     color_key = key
                     break
             token_color = c[color_key] if color_key else c["tabla_fg"]
-
-            # Badge de tipo (píldora coloreada simulada con texto)
             datos = [
                 (str(i + 1), c["subtitulo_fg"], False),
                 (str(linea), c["tag_tok_linea"], False),
                 (tipo, token_color, True),
                 (repr(valor), c["tabla_fg"], False),
             ]
-
             for col, (texto, color, bold) in enumerate(datos):
                 item = QTableWidgetItem(texto)
                 item.setForeground(QColor(color))
@@ -691,7 +572,6 @@ class TokensWidget(QWidget):
                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
                 )
                 self._tabla.setItem(row, col, item)
-
         n = len(lista)
         self._lbl_conteo.setText(f"{n} token{'s' if n != 1 else ''}")
 
@@ -705,15 +585,25 @@ class TokensWidget(QWidget):
 
 class PanelResultados(QWidget):
     """
-    Panel derecho del IDE con tres pestañas:
-      1. Consola  — salida estilo terminal
-      2. Símbolos — tabla de variables
-      3. Tokens   — stream léxico
+    Panel derecho del IDE con tres vistas principales:
+    Consola, Símbolos y Tokens.
+
+    Los textos de sección se muestran en un encabezado horizontal arriba del panel.
     """
+
+    _IDX_CONSOLA = 0
+    _IDX_SIMBOLOS = 1
+    _IDX_TOKENS = 2
+
+    _SECCIONES = [
+        ("Resultado", ""),
+        ("Tabla de Símbolos", ""),
+        ("Tokens", ""),
+    ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumWidth(300)
+        self._vista_activa: int = self._IDX_CONSOLA
         self._construir()
 
     def _construir(self):
@@ -721,57 +611,75 @@ class PanelResultados(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self._tabs = QTabWidget()
-        self._tabs.setDocumentMode(True)
-        layout.addWidget(self._tabs)
+        # ── Encabezado de sección ──────────────────────────────────────────────
+        self._cabecera = QFrame()
+        cab_lay = QHBoxLayout(self._cabecera)
+        cab_lay.setContentsMargins(12, 10, 12, 10)
+        cab_lay.setSpacing(24)
 
-        # ── Pestaña 1: Consola ────────────────────────────────────────────────
+        self._etiquetas: list[QLabel] = []
+        for idx, (texto, atajo) in enumerate(self._SECCIONES):
+            label = QLabel(texto + (f" ({atajo})" if atajo else ""))
+            label.setCursor(Qt.CursorShape.PointingHandCursor)
+            label.mousePressEvent = lambda event, i=idx: self._cambiar_vista(i)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+            )
+            label.setFixedHeight(28)
+            cab_lay.addWidget(label)
+            self._etiquetas.append(label)
+        layout.addWidget(self._cabecera)
+
+        # ── Stack de contenido ────────────────────────────────────────────────
+        self._stack = QStackedWidget()
+        self._stack.setMinimumWidth(ANCHO_PANEL_MIN)
+        self._stack.setMaximumWidth(ANCHO_PANEL_MAX)
+        self._stack.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+
         self.consola = ConsolaWidget()
-        self._tabs.addTab(self.consola, "  ▶  Resultado  ")
-
-        # ── Pestaña 2: Tabla de símbolos ──────────────────────────────────────
         self.tabla_simbolos = TablaSimbolosWidget()
-        self._tabs.addTab(self.tabla_simbolos, "  ◈  Símbolos  ")
-
-        # ── Pestaña 3: Tokens ─────────────────────────────────────────────────
         self.tokens = TokensWidget()
-        self._tabs.addTab(self.tokens, "  ⟨/⟩  Tokens  ")
 
+        self._stack.addWidget(self.consola)
+        self._stack.addWidget(self.tabla_simbolos)
+        self._stack.addWidget(self.tokens)
+        self._stack.setCurrentIndex(self._IDX_CONSOLA)
+
+        layout.addWidget(self._stack)
         self._aplicar_estilos()
+        self._actualizar_estilos_encabezado()
+
+    # ── Lógica de cambio de vista ──────────────────────────────────────────────
+
+    def _cambiar_vista(self, idx: int):
+        self._vista_activa = idx
+        self._stack.setCurrentIndex(idx)
+        self._actualizar_estilos_encabezado()
+
+    def _actualizar_estilos_encabezado(self):
+        c = C()
+        for idx, label in enumerate(self._etiquetas):
+            color = c["tag_exito"] if idx == self._vista_activa else c["tab_fg_inact"]
+            weight = "font-weight:bold;" if idx == self._vista_activa else ""
+            label.setStyleSheet(
+                f"color: {color}; {weight} font-family: 'Segoe UI'; font-size: 9pt;"
+                f"padding: 4px 8px; border-bottom: {'2px solid ' + c['tag_exito'] if idx == self._vista_activa else '2px solid transparent'};"
+            )
+
+    # ── Estilos ───────────────────────────────────────────────────────────────
 
     def _aplicar_estilos(self):
         c = C()
-        self._tabs.setStyleSheet(f"""
-            QTabWidget::pane {{
-                border: none;
-                background: {c['resultado_bg']};
-            }}
-            QTabBar {{
+        self._cabecera.setStyleSheet(f"""
+            QFrame {{
                 background: {c['panel']};
                 border-bottom: 1px solid {c['borde']};
             }}
-            QTabBar::tab {{
-                background: {c['tab_inactiva']};
-                color: {c['tab_fg_inact']};
-                padding: 8px 4px;
-                border: none;
-                border-right: 1px solid {c['borde']};
-                font-family: 'Segoe UI', sans-serif;
-                font-size: 8pt;
-                font-weight: bold;
-                min-width: 90px;
-            }}
-            QTabBar::tab:selected {{
-                background: {c['tab_activa']};
-                color: {c['tab_fg_act']};
-                border-top: 2px solid {c['tab_indicador']};
-                border-right: 1px solid {c['borde']};
-            }}
-            QTabBar::tab:hover:!selected {{
-                background: {c['borde']};
-                color: {c['tab_fg_act']};
-            }}
         """)
+        self._actualizar_estilos_encabezado()
 
     def aplicar_tema(self):
         self._aplicar_estilos()
@@ -782,12 +690,11 @@ class PanelResultados(QWidget):
     # ── API principal ─────────────────────────────────────────────────────────
 
     def mostrar_resultado(self, resultado: dict, codigo: str = ""):
-        """Actualiza los tres paneles con el resultado de compilación."""
         self.consola.mostrar_resultado(resultado)
         self.tabla_simbolos.actualizar(resultado.get("tabla", {}))
         if codigo:
             self.tokens.actualizar(codigo)
-        self._tabs.setCurrentIndex(0)
+        self._cambiar_vista(self._IDX_CONSOLA)
 
     def limpiar_todo(self):
         self.consola.limpiar()
@@ -795,10 +702,10 @@ class PanelResultados(QWidget):
         self.tokens.limpiar()
 
     def ir_a_consola(self):
-        self._tabs.setCurrentIndex(0)
+        self._cambiar_vista(self._IDX_CONSOLA)
 
     def ir_a_simbolos(self):
-        self._tabs.setCurrentIndex(1)
+        self._cambiar_vista(self._IDX_SIMBOLOS)
 
     def ir_a_tokens(self):
-        self._tabs.setCurrentIndex(2)
+        self._cambiar_vista(self._IDX_TOKENS)
