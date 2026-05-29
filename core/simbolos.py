@@ -88,11 +88,10 @@ class TablaDeSimbolos:
             return "Texto"
         return None
 
-    def _error(self, mensaje: str, linea: int = 0):
+    def _error(self, mensaje, linea=0):
         loc = f" (línea {linea})" if linea else ""
         entrada = f"Error semántico{loc}: {mensaje}"
         self.errores.append(entrada)
-        raise ErrorCompilacion(entrada)
 
     def tiene_errores(self) -> bool:
         return len(self.errores) > 0

@@ -198,9 +198,10 @@ precedence = (
 )
 
 # Patrones para detectar sentencias incompletas (sin punto y coma)
-_PATRON_ID_SUELTO = re.compile(r"^[A-Za-z_]\w*$")
-_PATRON_DECLARACION = re.compile(r"^([A-Za-z_]\w*)\s+(Entero|Real|Texto|Logico)$")
-_PATRON_ASIGNACION = re.compile(r"^[A-Za-z_]\w*\s*=\s*.+[^;]$")
+_PATRON_ID_SUELTO    = re.compile(r'^[A-Za-z_]\w*$')
+_PATRON_DECLARACION  = re.compile(r'^([A-Za-z_]\w*)\s+(Entero|Real|Texto|Logico)$')
+_PATRON_ASIGNACION   = re.compile(r'^[A-Za-z_]\w*\s*=\s*.+[^;]$')
+_PATRON_CAPTURA_SOLA = re.compile(r'^Captura\s*\.\s*\w+\s*\(\s*\)\s*;$')
 
 
 # ── Captura de datos en tiempo de ejecución ───────────────────────────────────
@@ -240,46 +241,73 @@ def validar_sentencias_incompletas(codigo: str) -> str:
       - Declaraciones sin ';'  →  'num1 Entero'   en vez de  'num1 Entero;'
       - Asignaciones sin ';'   →  'num1 = 5'      en vez de  'num1 = 5;'
       - Identificador suelto   →  'nombre'         (sin tipo ni valor)
+      - Captura sin asignación →  'Captura.Texto();' sin 'variable ='
     Las líneas con error se borran para que el parser no genere mensajes confusos
-    encima del error real.
+    encima del error real. Usa continue para seguir analizando el resto del código.
     """
     lineas_limpias = []
-    for num, linea in enumerate(codigo.splitlines(keepends=True), start=1):
-        contenido = linea.strip()
 
-        # Ignorar líneas vacías o comentarios
-        if not contenido or contenido.startswith("//"):
+    for numero_linea, linea in enumerate(codigo.splitlines(keepends=True), start=1):
+        contenido = linea.strip()
+        salto = '\n' if linea.endswith('\n') else ''
+
+        # Línea vacía o comentario — pasar siempre
+        if not contenido or contenido.startswith('//'):
             lineas_limpias.append(linea)
             continue
 
-        # Caso 1: declaración sin ';'  →  'num1 Entero'
+        # Captura sin asignación: Captura.Texto(); sin variable = ...
+        if _PATRON_CAPTURA_SOLA.fullmatch(contenido):
+            # Extraer lo que escribieron después del punto
+            tipo_escrito = re.search(r'Captura\s*\.\s*(\w+)', contenido).group(1)
+            tipos_validos = {"Entero", "Real", "Texto", "Logico"}
+
+            if tipo_escrito not in tipos_validos:
+                tabla._error(
+                    f"Tipo '{tipo_escrito}' no válido en Captura — "
+                    f"use mayúscula inicial: Entero, Real, Texto o Logico",
+                    numero_linea,
+                )
+            else:
+                tabla._error(
+                    f"Sentencia inválida: '{contenido}' — "
+                    f"Captura debe usarse en una asignación (ej: variable = Captura.{tipo_escrito}();)",
+                    numero_linea,
+                )
+            lineas_limpias.append(salto)
+            continue
+
+        # Declaración sin ';': 'num1 Entero'
         if _PATRON_DECLARACION.fullmatch(contenido):
             tabla._error(
                 f"Falta ';' al final de la declaración: '{contenido}'",
-                num,
+                numero_linea,
             )
-            break
+            lineas_limpias.append(salto)
+            continue
 
-        # Caso 2: asignación sin ';'  →  'num1 = 5'
-        elif _PATRON_ASIGNACION.fullmatch(contenido):
+        # Asignación sin ';': 'num1 = 5'
+        if _PATRON_ASIGNACION.fullmatch(contenido):
             tabla._error(
                 f"Falta ';' al final de la asignación: '{contenido}'",
-                num,
+                numero_linea,
             )
-            break
+            lineas_limpias.append(salto)
+            continue
 
-        # Caso 3: identificador suelto  →  'nombre'
-        elif _PATRON_ID_SUELTO.fullmatch(contenido):
+        # Identificador suelto: 'nombre' solo en la línea
+        if _PATRON_ID_SUELTO.fullmatch(contenido):
             tabla._error(
-                f"Sentencia incompleta: '{contenido}' no es una declaración ni asignación",
-                num,
+                f"Sentencia incompleta: '{contenido}' no es una declaración ni una asignación",
+                numero_linea,
             )
-            break
+            lineas_limpias.append(salto)
+            continue
 
-        else:
-            lineas_limpias.append(linea)
+        # Línea válida — pasa al parser
+        lineas_limpias.append(linea)
 
-    return "".join(lineas_limpias)
+    return ''.join(lineas_limpias)
 
 
 # ── Gramática ─────────────────────────────────────────────────────────────────
@@ -393,6 +421,7 @@ def p_asignacion_captura(p):
         p[0] = ("captura_asignacion_error", nombre)
         return
 
+    # Solo registra la intención — pedir_captura() se llama al ejecutar
     p[0] = ("captura_asignacion", nombre, tipo_captura)
 
 
@@ -558,26 +587,22 @@ def compilar(codigo: str, ejecutar: bool = False) -> dict:
     salida_programa.clear()
     lexer.lineno = 1
 
-    try:
-        codigo_limpio = validar_sentencias_incompletas(codigo)
-        lexer.lineno = 1
+    # Pre-validación: detecta errores de forma antes del parser.
+    # Usa continue internamente para analizar TODAS las líneas,
+    codigo_limpio = validar_sentencias_incompletas(codigo)
+    lexer.lineno = 1
 
-        # Si la validación previa ya encontró un error, no continuar
-        if tabla.tiene_errores():
-            raise ErrorCompilacion("Error previo detectado")
+    # para recolectar todos los errores posibles en un solo paso.
+    ast = parser.parse(codigo_limpio, lexer=lexer)
 
-        ast = parser.parse(codigo_limpio, lexer=lexer)
-
-        if ejecutar and not tabla.tiene_errores() and ast is not None:
-            ejecutar_ast(ast)
-
-    except ErrorCompilacion:
-        ast = None
+    # Así compilar y ejecutar son dos acciones separadas.
+    if ejecutar and not tabla.tiene_errores() and ast is not None:
+        ejecutar_ast(ast)
 
     return {
-        "exito": not tabla.tiene_errores() and ast is not None,
-        "ast": ast,
+        "exito":   not tabla.tiene_errores() and ast is not None,
+        "ast":     ast,
         "errores": list(tabla.errores),
-        "salida": list(salida_programa),
-        "tabla": dict(tabla.tabla),
+        "salida":  list(salida_programa),
+        "tabla":   dict(tabla.tabla),
     }
