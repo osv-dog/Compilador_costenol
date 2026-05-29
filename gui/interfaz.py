@@ -12,16 +12,11 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QSplitter,
-    QTabWidget,
     QLabel,
     QPushButton,
     QStatusBar,
     QFileDialog,
     QMessageBox,
-    QTableWidget,
-    QTableWidgetItem,
-    QHeaderView,
-    QTextEdit,
     QFrame,
     QToolBar,
     QSizePolicy,
@@ -39,18 +34,7 @@ from gui.temas import (
 )
 from gui.editor import GestorPestanas
 from gui.explorador import PanelExplorador
-
-# ── Helpers de formato de texto ───────────────────────────────────────────────
-
-
-def _html_span(texto: str, color: str, bold: bool = False) -> str:
-    w = "font-weight:bold;" if bold else ""
-    return f'<span style="color:{color};{w}">{texto}</span>'
-
-
-def _texto_a_html(texto: str) -> str:
-    return texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
+from gui.panel_resultados import PanelResultados
 
 # ── Ventana principal ─────────────────────────────────────────────────────────
 
@@ -82,7 +66,6 @@ class VentanaCompilador(QMainWindow):
     def _construir_menu(self):
         mb = self.menuBar()
 
-        # ── Archivo
         m_arch = mb.addMenu("Archivo")
         m_arch.addAction(self._accion("Nueva pestaña", self._nueva_pestana, "Ctrl+T"))
         m_arch.addAction(self._accion("Abrir archivo...", self.abrir_archivo, "Ctrl+O"))
@@ -98,13 +81,11 @@ class VentanaCompilador(QMainWindow):
         m_arch.addSeparator()
         m_arch.addAction(self._accion("Salir", self.close, "Alt+F4"))
 
-        # ── Compilar
         m_comp = mb.addMenu("Compilar")
         m_comp.addAction(self._accion("Compilar", self.compilar, "F5"))
         m_comp.addAction(self._accion("Ejecutar", self.ejecutar, "F9"))
         m_comp.addAction(self._accion("Limpiar", self.limpiar_todo, "F6"))
 
-        # ── Ver
         m_ver = mb.addMenu("Ver")
         m_ver.addAction(
             self._accion("Alternar explorador", self._toggle_explorador, "Ctrl+B")
@@ -139,19 +120,16 @@ class VentanaCompilador(QMainWindow):
         """)
         self.addToolBar(self._toolbar)
 
-        # Título
         self._lbl_titulo = QLabel("⟨/⟩  COSTEÑOL IDE")
         self._lbl_titulo.setStyleSheet(
             f"color: {c['titulo_fg']}; font-family: 'Segoe UI'; font-size: 14pt; font-weight: bold;"
         )
         self._toolbar.addWidget(self._lbl_titulo)
 
-        # Espaciador
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._toolbar.addWidget(spacer)
 
-        # Botones
         self._btn_compilar = self._boton_toolbar(
             "▶  Compilar  F5", c["btn_compilar"], c["btn_compilar_hover"], self.compilar
         )
@@ -166,7 +144,6 @@ class VentanaCompilador(QMainWindow):
         self._toolbar.addWidget(self._btn_ejecutar)
         self._toolbar.addWidget(self._btn_limpiar)
 
-        # Botón tema
         self._btn_tema = QPushButton("🌙" if tema_nombre() == "claro" else "☀")
         self._btn_tema.setFixedSize(36, 36)
         self._btn_tema.clicked.connect(self._alternar_tema)
@@ -225,7 +202,7 @@ class VentanaCompilador(QMainWindow):
         self._splitter.setHandleWidth(5)
         layout.addWidget(self._splitter)
 
-        # ── Explorador ────────────────────────────────────────────────────────
+        # Explorador
         self._explorador = PanelExplorador()
         self._explorador.archivo_abierto.connect(self._abrir_archivo_desde_explorador)
         self._explorador.visibilidad_cambiada.connect(self._on_explorador_toggle)
@@ -236,25 +213,20 @@ class VentanaCompilador(QMainWindow):
         self.editor_mgr = GestorPestanas(self._splitter, self)
         self._splitter.addWidget(self.editor_mgr)
 
-        # Panel resultados
-        self._construir_panel_resultados()
+        # Panel resultados (nuevo)
+        self._panel_resultados = PanelResultados()
+        self._splitter.addWidget(self._panel_resultados)
 
-        # El splitter controla el ancho del explorador (resize libre).
-        # El PanelExplorador ya tiene setMinimumWidth(ANCHO_BARRA=42) internamente,
-        # y su _panel tiene min=160 / max=600, por lo que el splitter respeta esos límites.
         self._splitter.setSizes([282, 700, 380])
-        self._splitter.setStretchFactor(0, 0)  # explorador: no crece solo
-        self._splitter.setStretchFactor(1, 1)  # editor: absorbe el espacio libre
-        self._splitter.setStretchFactor(2, 0)  # resultados: no crece solo
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setStretchFactor(2, 0)
 
     def _on_explorador_toggle(self, expandido: bool):
-        """Cuando el panel se colapsa/expande ajusta el splitter."""
         sizes = self._splitter.sizes()
         if expandido:
-            # Restaurar al ancho por defecto si venía colapsado
             self._splitter.setSizes([282, sizes[1] + sizes[0] - 282, sizes[2]])
         else:
-            # Dejar solo la barra de iconos (42 px)
             from gui.explorador import ANCHO_BARRA
 
             self._splitter.setSizes(
@@ -263,148 +235,6 @@ class VentanaCompilador(QMainWindow):
 
     def _toggle_explorador(self):
         self._explorador._toggle()
-
-    # ── Panel de resultados ───────────────────────────────────────────────────
-
-    def _construir_panel_resultados(self):
-        c = C()
-        self._panel_res = QWidget()
-        self._panel_res.setMinimumWidth(320)
-        lay = QVBoxLayout(self._panel_res)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(0)
-
-        self._nb_resultados = QTabWidget()
-        self._nb_resultados.setStyleSheet(self._estilo_notebook())
-        lay.addWidget(self._nb_resultados)
-
-        self._construir_tab_resultado()
-        self._construir_tab_tabla()
-        self._construir_tab_tokens()
-
-        self._splitter.addWidget(self._panel_res)
-
-    def _estilo_notebook(self) -> str:
-        c = C()
-        return f"""
-            QTabWidget::pane {{
-                border: none;
-                background: {c['resultado_bg']};
-            }}
-            QTabBar {{
-                background: {c['panel']};
-                border-bottom: 1px solid {c['borde']};
-            }}
-            QTabBar::tab {{
-                background: {c['tab_inactiva']};
-                color: {c['tab_fg_inact']};
-                padding: 8px 16px;
-                border: none;
-                font-family: 'Segoe UI';
-                font-size: 9pt;
-                font-weight: bold;
-            }}
-            QTabBar::tab:selected {{
-                background: {c['tab_activa']};
-                color: {c['tab_fg_act']};
-                border-top: 2px solid {c['tab_indicador']};
-            }}
-            QTabBar::tab:hover:!selected {{
-                background: {c['borde']};
-                color: {c['tab_fg_act']};
-            }}
-        """
-
-    def _construir_tab_resultado(self):
-        c = C()
-        frame = QWidget()
-        frame.setStyleSheet(f"background:{c['resultado_bg']};")
-        lay = QVBoxLayout(frame)
-        lay.setContentsMargins(0, 0, 0, 0)
-
-        self.texto_resultado = QTextEdit()
-        self.texto_resultado.setReadOnly(True)
-        self.texto_resultado.setFont(
-            QFont(FUENTES["resultado"][0], FUENTES["resultado"][1])
-        )
-        self.texto_resultado.setStyleSheet(f"""
-            QTextEdit {{
-                background: {c['resultado_bg']};
-                color: {c['tag_normal']};
-                border: none;
-                padding: 12px 16px;
-            }}
-        """)
-        lay.addWidget(self.texto_resultado)
-        self._nb_resultados.addTab(frame, "  ✦ Resultado  ")
-
-    def _construir_tab_tabla(self):
-        c = C()
-        frame = QWidget()
-        lay = QVBoxLayout(frame)
-        lay.setContentsMargins(0, 0, 0, 0)
-
-        cols = ["Variable", "Tipo", "Valor", "Línea"]
-        self.tabla_view = QTableWidget(0, len(cols))
-        self.tabla_view.setHorizontalHeaderLabels(cols)
-        self.tabla_view.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Interactive
-        )
-        self.tabla_view.horizontalHeader().setDefaultSectionSize(120)
-        self.tabla_view.verticalHeader().setVisible(False)
-        self.tabla_view.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.tabla_view.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.tabla_view.setShowGrid(False)
-        self.tabla_view.setAlternatingRowColors(True)
-        self.tabla_view.setFont(QFont(FUENTES["tokens"][0], FUENTES["tokens"][1]))
-        self._estilizar_tabla()
-        lay.addWidget(self.tabla_view)
-        self._nb_resultados.addTab(frame, "  ◈ Símbolos  ")
-
-    def _estilizar_tabla(self):
-        c = C()
-        self.tabla_view.setStyleSheet(f"""
-            QTableWidget {{
-                background: {c['tabla_bg']};
-                color: {c['tabla_fg']};
-                border: none;
-                gridline-color: {c['borde']};
-                alternate-background-color: {c['panel']};
-            }}
-            QHeaderView::section {{
-                background: {c['borde']};
-                color: {c['tag_tok_cab']};
-                padding: 6px;
-                border: none;
-                font-family: 'Segoe UI';
-                font-size: 9pt;
-                font-weight: bold;
-            }}
-            QTableWidget::item:selected {{
-                background: {c['seleccion']};
-                color: {c['tab_fg_act']};
-            }}
-        """)
-
-    def _construir_tab_tokens(self):
-        c = C()
-        frame = QWidget()
-        lay = QVBoxLayout(frame)
-        lay.setContentsMargins(0, 0, 0, 0)
-
-        self.texto_tokens = QTextEdit()
-        self.texto_tokens.setReadOnly(True)
-        self.texto_tokens.setFont(QFont(FUENTES["tokens"][0], FUENTES["tokens"][1]))
-        self.texto_tokens.setStyleSheet(f"""
-            QTextEdit {{
-                background: {c['panel']};
-                color: {c['tabla_fg']};
-                border: none;
-                padding: 8px 14px;
-            }}
-        """)
-        lay.addWidget(self.texto_tokens)
-        self._nb_resultados.addTab(frame, "  ⟨/⟩ Tokens  ")
 
     # ── Barra de estado ───────────────────────────────────────────────────────
 
@@ -420,9 +250,7 @@ class VentanaCompilador(QMainWindow):
                 font-size: 9pt;
                 padding: 0 10px;
             }}
-            QStatusBar::item {{
-                border: none;
-            }}
+            QStatusBar::item {{ border: none; }}
         """)
 
         self._lbl_compilacion = QLabel("● Sin compilar")
@@ -446,7 +274,6 @@ class VentanaCompilador(QMainWindow):
         ]:
             self._status.addWidget(w)
         self._status.addPermanentWidget(self._lbl_info)
-
         self._estilizar_status_labels(c["status_fg"])
 
     def _estilizar_status_labels(self, color: str):
@@ -476,9 +303,7 @@ class VentanaCompilador(QMainWindow):
     def _aplicar_estilos_globales(self):
         c = C()
         self.setStyleSheet(f"""
-            QMainWindow {{
-                background: {c['fondo']};
-            }}
+            QMainWindow {{ background: {c['fondo']}; }}
             QMenuBar {{
                 background: {c['menu_bg']};
                 color: {c['menu_fg']};
@@ -505,9 +330,7 @@ class VentanaCompilador(QMainWindow):
                 color: {c['menu_activo_fg']};
                 border-radius: 4px;
             }}
-            QSplitter::handle {{
-                background: {c['borde']};
-            }}
+            QSplitter::handle {{ background: {c['borde']}; }}
             QScrollBar:vertical {{
                 background: {c['scrollbar_bg']};
                 width: 10px;
@@ -518,12 +341,8 @@ class VentanaCompilador(QMainWindow):
                 border-radius: 5px;
                 min-height: 20px;
             }}
-            QScrollBar::handle:vertical:hover {{
-                background: {c['scrollbar_handle_hover']};
-            }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                height: 0;
-            }}
+            QScrollBar::handle:vertical:hover {{ background: {c['scrollbar_handle_hover']}; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
             QScrollBar:horizontal {{
                 background: {c['scrollbar_bg']};
                 height: 10px;
@@ -534,15 +353,9 @@ class VentanaCompilador(QMainWindow):
                 border-radius: 5px;
                 min-width: 20px;
             }}
-            QScrollBar::handle:horizontal:hover {{
-                background: {c['scrollbar_handle_hover']};
-            }}
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
-                width: 0;
-            }}
-            QPlainTextEdit {{
-                border: none;
-            }}
+            QScrollBar::handle:horizontal:hover {{ background: {c['scrollbar_handle_hover']}; }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+            QPlainTextEdit {{ border: none; }}
         """)
 
     # ── Cambio de tema ────────────────────────────────────────────────────────
@@ -556,7 +369,6 @@ class VentanaCompilador(QMainWindow):
         c = C()
         self._aplicar_estilos_globales()
 
-        # Toolbar
         self._toolbar.setStyleSheet(f"""
             QToolBar {{
                 background: {c['panel']};
@@ -569,80 +381,29 @@ class VentanaCompilador(QMainWindow):
         self._lbl_titulo.setStyleSheet(
             f"color: {c['titulo_fg']}; font-family: 'Segoe UI'; font-size: 14pt; font-weight: bold;"
         )
-        self._btn_compilar.setStyleSheet(f"""
-            QPushButton {{
-                background: {c['btn_compilar']};
-                color: #ffffff;
-                border: none;
-                border-radius: 6px;
-                padding: 7px 16px;
-                font-family: 'Segoe UI';
-                font-size: 9pt;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background: {c['btn_compilar_hover']};
-            }}
-        """)
-        self._btn_ejecutar.setStyleSheet(f"""
-            QPushButton {{
-                background: {c['btn_compilar']};
-                color: #ffffff;
-                border: none;
-                border-radius: 6px;
-                padding: 7px 16px;
-                font-family: 'Segoe UI';
-                font-size: 9pt;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background: {c['btn_compilar_hover']};
-            }}
-        """)
-        self._btn_limpiar.setStyleSheet(f"""
-            QPushButton {{
-                background: {c['btn_limpiar']};
-                color: #ffffff;
-                border: none;
-                border-radius: 6px;
-                padding: 7px 16px;
-                font-family: 'Segoe UI';
-                font-size: 9pt;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background: {c['btn_limpiar_hover']};
-            }}
-        """)
+        for btn, color, hover in [
+            (self._btn_compilar, c["btn_compilar"], c["btn_compilar_hover"]),
+            (self._btn_ejecutar, c["btn_compilar"], c["btn_compilar_hover"]),
+            (self._btn_limpiar, c["btn_limpiar"], c["btn_limpiar_hover"]),
+        ]:
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {color};
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 7px 16px;
+                    font-family: 'Segoe UI';
+                    font-size: 9pt;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{ background: {hover}; }}
+            """)
         self._estilizar_btn_tema()
-
-        # Explorador
         self._explorador.aplicar_tema()
-
-        # Editor
         self.editor_mgr.aplicar_tema()
+        self._panel_resultados.aplicar_tema()
 
-        # Resultados
-        self._nb_resultados.setStyleSheet(self._estilo_notebook())
-        self.texto_resultado.setStyleSheet(f"""
-            QTextEdit {{
-                background: {c['resultado_bg']};
-                color: {c['tag_normal']};
-                border: none;
-                padding: 12px 16px;
-            }}
-        """)
-        self.texto_tokens.setStyleSheet(f"""
-            QTextEdit {{
-                background: {c['panel']};
-                color: {c['tabla_fg']};
-                border: none;
-                padding: 8px 14px;
-            }}
-        """)
-        self._estilizar_tabla()
-
-        # Status
         self._status.setStyleSheet(f"""
             QStatusBar {{
                 background: {c['status_bg']};
@@ -677,9 +438,7 @@ class VentanaCompilador(QMainWindow):
             with open(ruta, encoding="utf-8") as f:
                 contenido = f.read()
             self.editor_mgr.nueva_pestana(
-                nombre=os.path.basename(ruta),
-                contenido=contenido,
-                ruta=ruta,
+                nombre=os.path.basename(ruta), contenido=contenido, ruta=ruta
             )
         except Exception as e:
             QMessageBox.critical(self, "Error al abrir", str(e))
@@ -728,7 +487,6 @@ class VentanaCompilador(QMainWindow):
 
     def _ejecutar_fuente(self, modo: str):
         from core.parser import compilar as compilar_codigo
-        from core.lexer import tokenizar
 
         editor = self.editor_mgr.editor_activo()
         if not editor:
@@ -737,49 +495,42 @@ class VentanaCompilador(QMainWindow):
         codigo = editor.toPlainText().strip()
         if not codigo:
             QMessageBox.warning(
-                self,
-                MENSAJE_SIN_CODIGO["titulo"],
-                MENSAJE_SIN_CODIGO["cuerpo"],
+                self, MENSAJE_SIN_CODIGO["titulo"], MENSAJE_SIN_CODIGO["cuerpo"]
             )
             return
 
         self.editor_mgr.limpiar_errores()
-
         resultado = compilar_codigo(codigo, ejecutar=(modo == "Ejecutar"))
-        self._mostrar_resultado(resultado)
-        self._mostrar_tabla(resultado["tabla"])
-        self._mostrar_tokens(codigo)
 
-        if resultado["exito"]:
-            if modo == "Ejecutar":
-                self._lbl_compilacion.setText("▶ Ejecución completa")
-            else:
-                self._lbl_compilacion.setText("✔ Compilación exitosa")
-            self._lbl_compilacion.setStyleSheet(
-                f"color:{C()['status_ok']}; font-family:'Segoe UI'; font-size:9pt; background:transparent;"
-            )
+        # Un solo punto de entrada para actualizar el panel derecho completo
+        self._panel_resultados.mostrar_resultado(resultado, codigo)
 
+        # Barra de estado
+        c = C()
         n_vars = len(resultado["tabla"])
         self._lbl_vars.setStyleSheet(
-            f"color:{C()['status_fg']}; font-family:'Segoe UI'; font-size:9pt; background:transparent;"
+            f"color:{c['status_fg']}; font-family:'Segoe UI'; font-size:9pt; background:transparent;"
         )
         self._lbl_vars.setText(f"Variables: {n_vars}")
 
         if resultado["exito"]:
-            self._lbl_compilacion.setText("✔ Compilación exitosa")
+            txt = (
+                "▶ Ejecución completa"
+                if modo == "Ejecutar"
+                else "✔ Compilación exitosa"
+            )
+            self._lbl_compilacion.setText(txt)
             self._lbl_compilacion.setStyleSheet(
-                f"color:{C()['status_ok']}; font-family:'Segoe UI'; font-size:9pt; background:transparent;"
+                f"color:{c['status_ok']}; font-family:'Segoe UI'; font-size:9pt; background:transparent;"
             )
             QMessageBox.information(
-                self,
-                MENSAJES_EXITO["titulo"],
-                random.choice(MENSAJES_EXITO["cuerpos"]),
+                self, MENSAJES_EXITO["titulo"], random.choice(MENSAJES_EXITO["cuerpos"])
             )
         else:
             n = len(resultado["errores"])
             self._lbl_compilacion.setText(f"✘  {n} error(es)")
             self._lbl_compilacion.setStyleSheet(
-                f"color:{C()['status_err']}; font-family:'Segoe UI'; font-size:9pt; background:transparent;"
+                f"color:{c['status_err']}; font-family:'Segoe UI'; font-size:9pt; background:transparent;"
             )
             lineas_err = []
             for err in resultado["errores"]:
@@ -789,12 +540,8 @@ class VentanaCompilador(QMainWindow):
             if lineas_err:
                 self.editor_mgr.marcar_errores(lineas_err)
             QMessageBox.critical(
-                self,
-                MENSAJES_ERROR["titulo"],
-                random.choice(MENSAJES_ERROR["cuerpos"]),
+                self, MENSAJES_ERROR["titulo"], random.choice(MENSAJES_ERROR["cuerpos"])
             )
-
-        self._nb_resultados.setCurrentIndex(0)
 
     def limpiar_todo(self):
         editor = self.editor_mgr.editor_activo()
@@ -802,9 +549,7 @@ class VentanaCompilador(QMainWindow):
             editor.setPlainText("")
             self.editor_mgr.limpiar_errores()
 
-        self.texto_resultado.clear()
-        self.texto_tokens.clear()
-        self.tabla_view.setRowCount(0)
+        self._panel_resultados.limpiar_todo()
 
         c = C()
         self._lbl_compilacion.setText("● Sin compilar")
@@ -822,9 +567,7 @@ class VentanaCompilador(QMainWindow):
             with open(ruta, encoding="utf-8") as f:
                 contenido = f.read()
             self.editor_mgr.nueva_pestana(
-                nombre=os.path.basename(ruta),
-                contenido=contenido,
-                ruta=ruta,
+                nombre=os.path.basename(ruta), contenido=contenido, ruta=ruta
             )
         except Exception as e:
             QMessageBox.critical(self, "Error al abrir", str(e))
@@ -835,99 +578,6 @@ class VentanaCompilador(QMainWindow):
                 self.editor_mgr.seleccionar(tid)
                 return True
         return False
-
-    # ── Renderizado de resultados ─────────────────────────────────────────────
-
-    def _mostrar_resultado(self, resultado: dict):
-        c = C()
-
-        def esc(t):
-            return _texto_a_html(t)
-
-        def lin(html):
-            return html + "<br>"
-
-        sep = lin(f'<span style="color:{c["tag_sep"]}">{"─" * 48}</span>')
-        titulo_color = c["tag_exito"] if resultado["exito"] else c["tag_error"]
-        titulo_txt = (
-            "  ✔  COMPILACIÓN EXITOSA"
-            if resultado["exito"]
-            else "  ✘  ERRORES EN EL CÓDIGO"
-        )
-
-        html = ""
-        html += sep
-        html += lin(
-            f'<b style="color:{titulo_color}; font-size:12pt">{esc(titulo_txt)}</b>'
-        )
-        html += sep
-
-        if resultado["salida"]:
-            html += "<br>"
-            html += lin(
-                f'<span style="color:{c["tag_titulo"]}; font-size:10pt">  SALIDA DEL PROGRAMA</span>'
-            )
-            html += "<br>"
-            for linea in resultado["salida"]:
-                html += lin(
-                    f'<span style="color:{c["tag_salida"]}">  ▸  {esc(linea)}</span>'
-                )
-            html += "<br>" + sep
-
-        if resultado["errores"]:
-            html += "<br>"
-            html += lin(
-                f'<span style="color:{c["tag_titulo"]}; font-size:10pt">  ERRORES DETECTADOS</span>'
-            )
-            html += "<br>"
-            for i, err in enumerate(resultado["errores"], 1):
-                html += (
-                    f'<span style="color:{c["tag_num_error"]}; font-weight:bold">  [{i}]  </span>'
-                    f'<span style="color:{c["tag_error"]}">{esc(err)}</span><br>'
-                )
-            html += "<br>" + sep
-
-        if not resultado["salida"] and not resultado["errores"]:
-            html += f'<br><span style="color:{c["tag_normal"]}">  (sin salida registrada)</span>'
-
-        self.texto_resultado.setHtml(
-            f'<pre style="font-family:Cascadia Code,monospace">{html}</pre>'
-        )
-
-    def _mostrar_tabla(self, tabla_dict: dict):
-        self.tabla_view.setRowCount(0)
-        for var, info in tabla_dict.items():
-            row = self.tabla_view.rowCount()
-            self.tabla_view.insertRow(row)
-            val = str(info["valor"]) if info["valor"] is not None else "—"
-            for col, texto in enumerate([var, info["tipo"], val, str(info["linea"])]):
-                item = QTableWidgetItem(texto)
-                item.setForeground(QColor(C()["tabla_fg"]))
-                self.tabla_view.setItem(row, col, item)
-
-    def _mostrar_tokens(self, codigo: str):
-        from core.lexer import tokenizar
-
-        c = C()
-        lista = tokenizar(codigo)
-
-        cab = (
-            f'<span style="color:{c["tag_tok_cab"]}; font-weight:bold">'
-            f'  {"LÍN":<5}  {"TIPO":<20}  VALOR</span><br>'
-        )
-        sep = f'<span style="color:{c["tag_sep"]}">  {"─" * 46}</span><br>'
-
-        rows = ""
-        for tipo, valor, linea in lista:
-            rows += (
-                f'<span style="color:{c["tag_tok_linea"]}">  {str(linea):<5}  </span>'
-                f'<span style="color:{c["tag_tok_tipo"]}">{tipo:<20}  </span>'
-                f'<span style="color:{c["tag_tok_valor"]}">{_texto_a_html(repr(valor))}</span><br>'
-            )
-
-        self.texto_tokens.setHtml(
-            f'<pre style="font-family:Cascadia Code,monospace">{cab}{sep}{rows}</pre>'
-        )
 
 
 # ── Punto de entrada ──────────────────────────────────────────────────────────
