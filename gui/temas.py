@@ -1,6 +1,4 @@
-# gui/temas.py — Colores, fuentes, estilos y mensajes del compilador Costeñol (PyQt6)
-
-# ── Paleta de colores (tema oscuro) ──────────────────────────────────────────
+# ── Paleta de colores (tema oscuro)
 _OSCURO = {
     "fondo": "#0F1117",
     "panel": "#090C12",
@@ -41,7 +39,6 @@ _OSCURO = {
     "scrollbar_bg": "#1C2333",
     "scrollbar_handle": "#2D3F5A",
     "scrollbar_handle_hover": "#3B82F6",
-    # Syntax highlighting
     "syn_keyword": "#FF7B72",
     "syn_type": "#79C0FF",
     "syn_string": "#A5D6FF",
@@ -51,7 +48,6 @@ _OSCURO = {
     "syn_operator": "#FF7B72",
     "syn_punct": "#8B949E",
     "syn_id": "#C9D1E0",
-    # Tags resultado / tokens
     "tag_exito": "#4ADE80",
     "tag_error": "#F87171",
     "tag_num_error": "#FB923C",
@@ -65,7 +61,7 @@ _OSCURO = {
     "tag_tok_linea": "#475569",
 }
 
-# ── Paleta de colores (tema claro) ────────────────────────────────────────────
+# ── Paleta de colores (tema claro)
 _CLARO = {
     "fondo": "#FFFFFF",
     "panel": "#F6F8FA",
@@ -106,7 +102,6 @@ _CLARO = {
     "scrollbar_bg": "#F6F8FA",
     "scrollbar_handle": "#C8D0D9",
     "scrollbar_handle_hover": "#0969DA",
-    # Syntax highlighting
     "syn_keyword": "#CF222E",
     "syn_type": "#0550AE",
     "syn_string": "#0A3069",
@@ -116,7 +111,6 @@ _CLARO = {
     "syn_operator": "#CF222E",
     "syn_punct": "#656D76",
     "syn_id": "#1F2328",
-    # Tags resultado / tokens
     "tag_exito": "#1A7F37",
     "tag_error": "#CF222E",
     "tag_num_error": "#953800",
@@ -153,7 +147,7 @@ def alternar_tema():
     _tema_activo = "claro" if _tema_activo == "oscuro" else "oscuro"
 
 
-# ── Fuentes ───────────────────────────────────────────────────────────────────
+# ── Fuentes
 FUENTES = {
     "codigo": ("Cascadia Code", 12),
     "resultado": ("Cascadia Code", 11),
@@ -164,7 +158,7 @@ FUENTES = {
 }
 
 
-# ── Mensajes ──────────────────────────────────────────────────────────────────
+# ── Mensajes
 MENSAJES_EXITO = {
     "titulo": "Qué vaina linda",
     "cuerpos": [

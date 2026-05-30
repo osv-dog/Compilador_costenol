@@ -1,6 +1,3 @@
-# gui/editor.py — Gestor de pestañas del editor con syntax highlighting (PyQt6)
-import re
-
 from PyQt6.QtCore import Qt, QRegularExpression, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
@@ -14,18 +11,14 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
     QPlainTextEdit,
     QTextEdit,
     QTabWidget,
-    QTabBar,
-    QLabel,
-    QSizePolicy,
 )
 
 from gui.temas import C, FUENTES
 
-# ── Syntax Highlighter ────────────────────────────────────────────────────────
+# ── Syntax Highlighter
 
 _REGLAS_SYNTAX = [
     (r"//[^\n]*", "comment"),
@@ -86,7 +79,7 @@ class CosteñolHighlighter(QSyntaxHighlighter):
                 self.setFormat(m.capturedStart(), m.capturedLength(), fmt)
 
 
-# ── Área de números de línea ──────────────────────────────────────────────────
+# ── Área de números de línea
 
 
 class LineNumberArea(QWidget):
@@ -103,7 +96,7 @@ class LineNumberArea(QWidget):
         self._editor.line_number_area_paint_event(event)
 
 
-# ── Widget de editor individual ───────────────────────────────────────────────
+# ── Widget de editor individual
 
 
 class EditorWidget(QPlainTextEdit):
@@ -123,17 +116,7 @@ class EditorWidget(QPlainTextEdit):
         c = C()
         f = QFont(FUENTES["codigo"][0], FUENTES["codigo"][1])
         self.setFont(f)
-
-        # CRITICO: NO poner color ni background-color en el stylesheet del editor.
-        # Si se hace, Qt los aplica encima de los QTextCharFormat del highlighter
-        # y los colores del syntax desaparecen. Solo stylesheet para border.
-        # Dejar el stylesheet COMPLETAMENTE VACÍO en el editor.
-        # Cualquier regla color: o background-color: en el stylesheet
-        # (incluso via herencia del padre) anula los colores del QSyntaxHighlighter.
-        # Los colores se controlan ÚNICAMENTE via QPalette.
         self.setStyleSheet("")
-
-        # Los colores base van en QPalette para que el highlighter los respete
         palette = self.palette()
         palette.setColor(palette.ColorRole.Text, QColor(c["editor_fg"]))
         palette.setColor(palette.ColorRole.Base, QColor(c["editor_bg"]))
@@ -150,7 +133,7 @@ class EditorWidget(QPlainTextEdit):
         self._aplicar_estilo()
         self._highlighter.rehighlight_theme()
 
-    # ── Números de línea ──────────────────────────────────────────────────────
+    # ── Números de línea
 
     def line_number_area_width(self) -> int:
         digits = max(1, len(str(self.blockCount())))
@@ -209,7 +192,7 @@ class EditorWidget(QPlainTextEdit):
             bottom = top + int(self.blockBoundingRect(block).height())
             block_number += 1
 
-    # ── Resaltado de línea activa ─────────────────────────────────────────────
+    # ── Resaltado de línea activa
 
     def _highlight_current_line(self):
         c = C()
@@ -223,7 +206,7 @@ class EditorWidget(QPlainTextEdit):
             extras.append(sel)
         self.setExtraSelections(extras)
 
-    # ── Marcado de errores ────────────────────────────────────────────────────
+    # ── Marcado de errores
 
     def marcar_errores(self, lineas: list[int]):
         c = C()
@@ -242,10 +225,10 @@ class EditorWidget(QPlainTextEdit):
         self.setExtraSelections(extras)
 
     def limpiar_errores(self):
-        self._highlight_current_line()  # repone solo el resaltado de línea activa
+        self._highlight_current_line()
 
 
-# ── Gestor de pestañas ────────────────────────────────────────────────────────
+# ── Gestor de pestañas
 
 
 class GestorPestanas(QWidget):
@@ -268,13 +251,10 @@ class GestorPestanas(QWidget):
 
         self._aplicar_estilo_tabs()
 
-    # ── Estilo ────────────────────────────────────────────────────────────────
+    # ── Estilo
 
     def _aplicar_estilo_tabs(self):
         c = C()
-        # IMPORTANTE: las reglas de QTabWidget se aplican al GestorPestanas (QWidget),
-        # no al QTabWidget interno. Así evitamos que color: de QTabBar se propague
-        # al QPlainTextEdit y tape los colores del syntax highlighter.
         self.setStyleSheet(f"""
             GestorPestanas {{
                 background: {c['editor_bg']};
@@ -312,7 +292,7 @@ class GestorPestanas(QWidget):
             }}
         """)
 
-    # ── API pública ───────────────────────────────────────────────────────────
+    # ── API pública
 
     def nueva_pestana(
         self, nombre: str | None = None, contenido: str = "", ruta: str | None = None
@@ -323,9 +303,6 @@ class GestorPestanas(QWidget):
 
         tab_id = f"tab_{self._contador}"
         editor = EditorWidget()
-
-        # Conectar señal para marcar modificado ANTES de setPlainText
-        # para que el primer cambio no marque la pestaña como modificada
         editor.textChanged.connect(lambda t=tab_id: self._on_text_changed(t))
         editor.cursorPositionChanged.connect(lambda: self.app.actualizar_estado())
 
@@ -339,12 +316,7 @@ class GestorPestanas(QWidget):
             "nombre": nombre,
             "modificado": False,
         }
-
-        # Guardar tab_id en el widget para recuperarlo
         editor.setProperty("tab_id", tab_id)
-
-        # Insertar contenido y forzar highlighting DESPUÉS de registrar la pestaña
-        # Bloqueamos señales para que insertar el contenido inicial no marque como modificado
         editor.blockSignals(True)
         editor.setPlainText(contenido)
         editor.blockSignals(False)
@@ -412,7 +384,7 @@ class GestorPestanas(QWidget):
         for d in self.pestanas.values():
             d["editor"].aplicar_tema()
 
-    # ── Slots internos ────────────────────────────────────────────────────────
+    # ── Slots internos
 
     def _on_close_request(self, idx: int):
         w = self.tabs.widget(idx)

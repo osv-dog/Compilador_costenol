@@ -1,20 +1,17 @@
-# gui/interfaz.py — Ventana principal del compilador Costeñol (PyQt6)
 import os
 import random
 import re
 
-from PyQt6.QtCore import Qt, QDir
-from PyQt6.QtGui import QAction, QColor, QFont, QKeySequence
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
-    QVBoxLayout,
     QHBoxLayout,
     QSplitter,
     QLabel,
     QPushButton,
-    QStatusBar,
     QFileDialog,
     QMessageBox,
     QFrame,
@@ -36,16 +33,12 @@ from gui.editor import GestorPestanas
 from gui.explorador import PanelExplorador
 from gui.panel_resultados import PanelResultados
 
-# ── Ventana principal ─────────────────────────────────────────────────────────
-
 
 class VentanaCompilador(QMainWindow):
     def __init__(self):
         super().__init__()
         cambiar_tema("claro")
         self._construir()
-
-    # ── Construcción general ──────────────────────────────────────────────────
 
     def _construir(self):
         self.setWindowTitle("COSTEÑOL IDE")
@@ -60,8 +53,6 @@ class VentanaCompilador(QMainWindow):
         from PyQt6.QtCore import QTimer
 
         QTimer.singleShot(0, self.showMaximized)
-
-    # ── Menú ──────────────────────────────────────────────────────────────────
 
     def _construir_menu(self):
         mb = self.menuBar()
@@ -100,8 +91,6 @@ class VentanaCompilador(QMainWindow):
             a.setShortcut(QKeySequence(atajo))
         a.triggered.connect(slot)
         return a
-
-    # ── Barra superior ────────────────────────────────────────────────────────
 
     def _construir_barra_superior(self):
         c = C()
@@ -189,34 +178,24 @@ class VentanaCompilador(QMainWindow):
             }}
         """)
 
-    # ── Cuerpo ────────────────────────────────────────────────────────────────
-
     def _construir_cuerpo(self):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter.setHandleWidth(5)
         layout.addWidget(self._splitter)
-
-        # Explorador
         self._explorador = PanelExplorador()
         self._explorador.archivo_abierto.connect(self._abrir_archivo_desde_explorador)
         self._explorador.visibilidad_cambiada.connect(self._on_explorador_toggle)
         self._explorador.cargar_carpeta_examples()
         self._splitter.addWidget(self._explorador)
-
-        # Editor
         self.editor_mgr = GestorPestanas(self._splitter, self)
         self._splitter.addWidget(self.editor_mgr)
-
-        # Panel resultados (nuevo)
         self._panel_resultados = PanelResultados()
         self._splitter.addWidget(self._panel_resultados)
-
         self._splitter.setSizes([282, 700, 380])
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
@@ -235,8 +214,6 @@ class VentanaCompilador(QMainWindow):
 
     def _toggle_explorador(self):
         self._explorador._toggle()
-
-    # ── Barra de estado ───────────────────────────────────────────────────────
 
     def _construir_barra_estado(self):
         c = C()
@@ -298,8 +275,6 @@ class VentanaCompilador(QMainWindow):
         )
         self._lbl_posicion.setText(f"Ln {lin}, Col {col}")
 
-    # ── Estilos globales ──────────────────────────────────────────────────────
-
     def _aplicar_estilos_globales(self):
         c = C()
         self.setStyleSheet(f"""
@@ -357,8 +332,6 @@ class VentanaCompilador(QMainWindow):
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
             QPlainTextEdit {{ border: none; }}
         """)
-
-    # ── Cambio de tema ────────────────────────────────────────────────────────
 
     def _alternar_tema(self):
         alternar_tema()
@@ -418,8 +391,6 @@ class VentanaCompilador(QMainWindow):
         self._estilizar_status_labels(c["status_fg"])
         self._lbl_info.setText(f"COSTEÑOL  |  UTF-8  |  {tema_nombre().capitalize()}")
 
-    # ── Acciones de archivo ───────────────────────────────────────────────────
-
     def _nueva_pestana(self):
         self.editor_mgr.nueva_pestana()
 
@@ -477,8 +448,6 @@ class VentanaCompilador(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error al guardar", str(e))
 
-    # ── Compilación ───────────────────────────────────────────────────────────
-
     def compilar(self):
         self._ejecutar_fuente(modo="Compilar")
 
@@ -502,10 +471,8 @@ class VentanaCompilador(QMainWindow):
         self.editor_mgr.limpiar_errores()
         resultado = compilar_codigo(codigo, ejecutar=(modo == "Ejecutar"))
 
-        # Un solo punto de entrada para actualizar el panel derecho completo
         self._panel_resultados.mostrar_resultado(resultado, codigo)
 
-        # Barra de estado
         c = C()
         n_vars = len(resultado["tabla"])
         self._lbl_vars.setStyleSheet(
@@ -558,8 +525,6 @@ class VentanaCompilador(QMainWindow):
         )
         self._lbl_vars.setText("Variables: 0")
 
-    # ── Explorador: abrir archivo ─────────────────────────────────────────────
-
     def _abrir_archivo_desde_explorador(self, ruta: str):
         if self._seleccionar_tab_por_ruta(ruta):
             return
@@ -578,9 +543,6 @@ class VentanaCompilador(QMainWindow):
                 self.editor_mgr.seleccionar(tid)
                 return True
         return False
-
-
-# ── Punto de entrada ──────────────────────────────────────────────────────────
 
 
 def iniciar_interfaz():
