@@ -1,6 +1,3 @@
-# gui/panel_resultados.py — Panel derecho del IDE Costeñol (consola, símbolos, tokens)
-import re
-
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import (
     QColor,
@@ -30,14 +27,8 @@ ANCHO_PANEL_MAX = 700
 ANCHO_PANEL_DEFAULT = 380
 
 
-# ── Utilidades HTML ───────────────────────────────────────────────────────────
-
-
 def _esc(texto: str) -> str:
     return texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
-# ── Widget de consola ─────────────────────────────────────────────────────────
 
 
 class ConsolaWidget(QWidget):
@@ -146,8 +137,6 @@ class ConsolaWidget(QWidget):
     def aplicar_tema(self):
         self._aplicar_estilos()
 
-    # ── Helpers HTML ──────────────────────────────────────────────────────────
-
     def _span(self, texto: str, color: str, bold: bool = False) -> str:
         w = "font-weight:bold;" if bold else ""
         return f'<span style="color:{color};{w}">{_esc(texto)}</span>'
@@ -165,8 +154,6 @@ class ConsolaWidget(QWidget):
 
     def _limpiar_contenido(self):
         self._set_html("")
-
-    # ── API pública ───────────────────────────────────────────────────────────
 
     def mostrar_resultado(self, resultado: dict):
         c = C()
@@ -229,9 +216,6 @@ class ConsolaWidget(QWidget):
         from PyQt6.QtWidgets import QApplication
 
         QApplication.clipboard().setText(self._texto.toPlainText())
-
-
-# ── Tabla de símbolos ─────────────────────────────────────────────────────────
 
 
 class TablaSimbolosWidget(QWidget):
@@ -394,9 +378,6 @@ class TablaSimbolosWidget(QWidget):
     def limpiar(self):
         self._tabla.setRowCount(0)
         self._lbl_conteo.setText("0 variables")
-
-
-# ── Vista de tokens ───────────────────────────────────────────────────────────
 
 
 class TokensWidget(QWidget):
@@ -580,9 +561,6 @@ class TokensWidget(QWidget):
         self._lbl_conteo.setText("0 tokens")
 
 
-# ── Panel de resultados completo ──────────────────────────────────────────────
-
-
 class PanelResultados(QWidget):
     """
     Panel derecho del IDE con tres vistas principales:
@@ -610,8 +588,6 @@ class PanelResultados(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-        # ── Encabezado de sección ──────────────────────────────────────────────
         self._cabecera = QFrame()
         cab_lay = QHBoxLayout(self._cabecera)
         cab_lay.setContentsMargins(12, 10, 12, 10)
@@ -630,8 +606,6 @@ class PanelResultados(QWidget):
             cab_lay.addWidget(label)
             self._etiquetas.append(label)
         layout.addWidget(self._cabecera)
-
-        # ── Stack de contenido ────────────────────────────────────────────────
         self._stack = QStackedWidget()
         self._stack.setMinimumWidth(ANCHO_PANEL_MIN)
         self._stack.setMaximumWidth(ANCHO_PANEL_MAX)
@@ -652,8 +626,6 @@ class PanelResultados(QWidget):
         self._aplicar_estilos()
         self._actualizar_estilos_encabezado()
 
-    # ── Lógica de cambio de vista ──────────────────────────────────────────────
-
     def _cambiar_vista(self, idx: int):
         self._vista_activa = idx
         self._stack.setCurrentIndex(idx)
@@ -668,8 +640,6 @@ class PanelResultados(QWidget):
                 f"color: {color}; {weight} font-family: 'Segoe UI'; font-size: 9pt;"
                 f"padding: 4px 8px; border-bottom: {'2px solid ' + c['tag_exito'] if idx == self._vista_activa else '2px solid transparent'};"
             )
-
-    # ── Estilos ───────────────────────────────────────────────────────────────
 
     def _aplicar_estilos(self):
         c = C()
@@ -686,8 +656,6 @@ class PanelResultados(QWidget):
         self.consola.aplicar_tema()
         self.tabla_simbolos.aplicar_tema()
         self.tokens.aplicar_tema()
-
-    # ── API principal ─────────────────────────────────────────────────────────
 
     def mostrar_resultado(self, resultado: dict, codigo: str = ""):
         self.consola.mostrar_resultado(resultado)

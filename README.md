@@ -19,11 +19,15 @@ Compilador_costenol/
 │   ├── __init__.py
 │   ├── lexer.py           ← divide el código en tokens
 │   ├── parser.py          ← analiza sintaxis y semántica
+│   ├── parsetab.py        ← tabla generada por PLY
 │   └── simbolos.py        ← tabla de variables y tipos
 │
 ├── gui/                   ← todo lo visual y la interacción con el usuario
 │   ├── __init__.py
+│   ├── editor.py          ← editor de código integrado
+│   ├── explorador.py      ← explorador de archivos/proyectos
 │   ├── interfaz.py        ← ventana principal, editor y paneles
+│   ├── panel_resultados.py← panel para mostrar resultados/errores
 │   └── temas.py           ← colores, fuentes y estilos
 │
 ├── examples/              ← programas escritos en Costeñol listos para probar
@@ -47,15 +51,10 @@ Compilador_costenol/
 git clone https://github.com/osv-dog/Compilador_costenol.git
 cd Compilador_costenol
 
-# 2. Crea un entorno virtual (recomendado)
-python -m venv .venv
-source .venv/bin/activate      # Linux / macOS
-.venv\Scripts\activate         # Windows
-
-# 3. Instala las dependencias
+# 2. Instala las dependencias
 pip install -r requirements.txt
 
-# 4. Ejecuta el compilador
+# 3. Ejecuta el compilador
 python main.py
 ```
 
@@ -65,12 +64,12 @@ python main.py
 
 ### Tipos de datos
 
-| Tipo     | Descripción              | Ejemplo             |
-|----------|--------------------------|---------------------|
-| `Entero` | Número entero            | `edad Entero;`      |
-| `Real`   | Número decimal           | `pi Real;`          |
-| `Texto`  | Cadena de caracteres     | `nombre Texto;`     |
-| `Logico` | Verdadero o falso        | `activo Logico;`    |
+| Tipo     | Descripción          | Ejemplo          |
+| -------- | -------------------- | ---------------- |
+| `Entero` | Número entero        | `edad Entero;`   |
+| `Real`   | Número decimal       | `pi Real;`       |
+| `Texto`  | Cadena de caracteres | `nombre Texto;`  |
+| `Logico` | Verdadero o falso    | `activo Logico;` |
 
 ### Declaración de variables
 
@@ -124,11 +123,11 @@ Mensaje.Texto("La suma es", resultado);
 
 ### Operadores
 
-| Categoría    | Operadores                          |
-|--------------|-------------------------------------|
-| Aritméticos  | `+`  `-`  `*`  `/`                  |
-| Comparación  | `==`  `!=`  `<`  `>`  `<=`  `>=`   |
-| Lógicos      | `&&`  `\|\|`  `!`                   |
+| Categoría   | Operadores                  |
+| ----------- | --------------------------- |
+| Aritméticos | `+` `-` `*` `/`             |
+| Comparación | `==` `!=` `<` `>` `<=` `>=` |
+| Lógicos     | `&&` `\|\|` `!`             |
 
 ### Comentarios
 

@@ -1,4 +1,3 @@
-# gui/explorador.py — Explorador de archivos lateral estilo VS Code (PyQt6)
 import os
 import shutil
 
@@ -22,7 +21,7 @@ from PyQt6.QtWidgets import (
 
 from gui.temas import C
 
-# ── Iconos emoji por tipo de archivo/carpeta ──────────────────────────────────
+# ── Iconos emoji por tipo de archivo/carpeta
 
 _ICONOS_EXT = {
     ".pqek": "📄",
@@ -47,7 +46,7 @@ _ICONO_ARCHIVO_DEFAULT = "📄"
 ANCHO_PANEL_MIN = 160
 ANCHO_PANEL_MAX = 600
 ANCHO_PANEL_DEFAULT = 240
-ANCHO_BARRA = 42  # barra de iconos, siempre visible
+ANCHO_BARRA = 42
 
 
 def _icono_para(nombre: str, es_dir: bool, expandido: bool = False) -> str:
@@ -57,7 +56,7 @@ def _icono_para(nombre: str, es_dir: bool, expandido: bool = False) -> str:
     return _ICONOS_EXT.get(ext, _ICONO_ARCHIVO_DEFAULT)
 
 
-# ── Árbol con menú contextual ─────────────────────────────────────────────────
+# ── Árbol con menú contextual
 
 
 class ArbolExplorador(QTreeWidget):
@@ -156,8 +155,6 @@ class ArbolExplorador(QTreeWidget):
         elif accion == act_eliminar and ruta:
             self._eliminar(item, ruta)
 
-    # La raíz real la inyecta PanelExplorador para que las operaciones
-    # siempre recarguen desde el directorio correcto, nunca desde una subcarpeta.
     def set_raiz(self, ruta: str):
         self._raiz_real = ruta
 
@@ -223,7 +220,7 @@ class ArbolExplorador(QTreeWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
-    # ── API pública ───────────────────────────────────────────────────────────
+    # ── API pública
 
     def colapsar_todas(self):
         """Colapsa todas las carpetas hijas (no el root)."""
@@ -238,69 +235,54 @@ class ArbolExplorador(QTreeWidget):
                 hijo.setExpanded(False)
 
 
-# ── Widget completo del explorador ────────────────────────────────────────────
+# ── Widget completo del explorador
 
 
 class PanelExplorador(QWidget):
     archivo_abierto = pyqtSignal(str)
     visibilidad_cambiada = pyqtSignal(bool)
-    # Emite el ancho total actual del panel para que interfaz.py ajuste el splitter
     ancho_cambiado = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._expandido = True
         self._raiz_actual: str | None = None
-        self._ancho_panel = ANCHO_PANEL_DEFAULT  # ancho del área de árbol (sin barra)
+        self._ancho_panel = ANCHO_PANEL_DEFAULT
         self._construir_ui()
 
-    # ── Construcción ──────────────────────────────────────────────────────────
+    # ── Construcción
 
     def _construir_ui(self):
-        # El widget en sí no tiene ancho fijo: el splitter lo controla cuando expandido.
-        # Solo fijamos el mínimo.
         self.setMinimumWidth(ANCHO_BARRA)
-
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-        # ── Barra lateral de iconos (siempre visible, ancho fijo) ─────────────
         self._barra = QFrame()
         self._barra.setFixedWidth(ANCHO_BARRA)
         barra_lay = QVBoxLayout(self._barra)
         barra_lay.setContentsMargins(0, 8, 0, 8)
         barra_lay.setSpacing(4)
         barra_lay.setAlignment(Qt.AlignmentFlag.AlignTop)
-
         self._btn_toggle = self._boton_icono("📁", "Explorador  (Ctrl+B)", self._toggle)
         self._btn_toggle.setCheckable(True)
         self._btn_toggle.setChecked(True)
         barra_lay.addWidget(self._btn_toggle)
-
         layout.addWidget(self._barra)
-
-        # ── Panel expandido (árbol + cabecera) ────────────────────────────────
         self._panel = QFrame()
-        # Mínimo y máximo del panel de árbol
         self._panel.setMinimumWidth(ANCHO_PANEL_MIN)
         self._panel.setMaximumWidth(ANCHO_PANEL_MAX)
         self._panel.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-
         panel_lay = QVBoxLayout(self._panel)
         panel_lay.setContentsMargins(0, 0, 0, 0)
         panel_lay.setSpacing(0)
-
         self._cabecera = self._construir_cabecera()
         panel_lay.addWidget(self._cabecera)
-
         self._arbol = ArbolExplorador()
         self._arbol.archivo_abierto.connect(self.archivo_abierto)
         self._arbol.carpeta_cambiada.connect(self.cargar_carpeta)
         panel_lay.addWidget(self._arbol)
-
         layout.addWidget(self._panel)
         self._aplicar_estilos()
 
@@ -339,7 +321,7 @@ class PanelExplorador(QWidget):
         btn.clicked.connect(slot)
         return btn
 
-    # ── Estilos ───────────────────────────────────────────────────────────────
+    # ── Estilos
 
     def _aplicar_estilos(self):
         c = C()
@@ -424,7 +406,7 @@ class PanelExplorador(QWidget):
     def aplicar_tema(self):
         self._aplicar_estilos()
 
-    # ── Colapsar / expandir el panel completo ─────────────────────────────────
+    # ── Colapsar / expandir el panel completo
 
     def _toggle(self):
         if self._expandido:
@@ -444,18 +426,15 @@ class PanelExplorador(QWidget):
         self._btn_toggle.setChecked(False)
         self.visibilidad_cambiada.emit(False)
 
-    # ── Colapsar todas las carpetas del árbol ─────────────────────────────────
+    # ── Colapsar todas las carpetas del árbol
 
     def _colapsar_todas_carpetas(self):
         self._arbol.colapsar_todas()
 
-    # ── Carga de carpeta ──────────────────────────────────────────────────────
+    # ── Carga de carpeta
 
     def cargar_carpeta(self, ruta: str):
         self._raiz_actual = ruta
-        # Inyectar la raiz real ANTES de poblar: todas las operaciones del arbol
-        # (crear archivo/carpeta, renombrar, eliminar) emitiran siempre esta ruta,
-        # nunca la de una subcarpeta.
         self._arbol.set_raiz(ruta)
         self._arbol.clear()
 
@@ -545,7 +524,7 @@ class PanelExplorador(QWidget):
                 except Exception as e:
                     QMessageBox.critical(self, "Error", str(e))
 
-    # ── API pública ───────────────────────────────────────────────────────────
+    # ── API pública
 
     def cargar_carpeta_examples(self):
         examples_dir = os.path.abspath(
