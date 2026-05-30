@@ -178,5 +178,6 @@ Los programas Costeñol usan la extensión `.pqek`.
 
 **Corporación Universitaria Latinoamericana — CUL**  
 Materia: Compiladores  
-Lenguaje de implementación: Python 3  
-Librería: [PLY (Python Lex-Yacc)](https://github.com/dabeaz/ply)
+Lenguaje de implementación: Python 
+Librerías: PLY y PyQt6
+Integrantes: Stiven Amorocho, Jose Angarita y Osvaldo Ospino
