@@ -6,10 +6,9 @@ class TablaDeSimbolos:
 
     TIPOS_VALIDOS = {"Entero", "Real", "Texto", "Logico"}
 
-    # Qué tipos de valor se pueden asignar a cada tipo de variable
     COMPATIBILIDAD = {
         "Entero": {"Entero"},
-        "Real": {"Real", "Entero"},  # Real acepta también enteros (promoción)
+        "Real": {"Real", "Entero"},
         "Texto": {"Texto"},
         "Logico": {"Logico"},
     }
@@ -18,7 +17,7 @@ class TablaDeSimbolos:
         self.tabla: dict = {}
         self.errores: list = []
 
-    # ── Operaciones principales ────────────────────────────────────────────────
+    # Operaciones principales
 
     def declarar(self, nombre: str, tipo: str, linea: int = 0) -> bool:
         """Registra una nueva variable. Retorna True si tuvo éxito."""
@@ -73,13 +72,13 @@ class TablaDeSimbolos:
     def existe(self, nombre: str) -> bool:
         return nombre in self.tabla
 
-    # ── Utilidades ─────────────────────────────────────────────────────────────
+    # Utilidades
 
     @staticmethod
     def tipo_de_literal(valor) -> str | None:
         """Infiere el tipo Costeñol de un valor Python."""
         if isinstance(valor, bool):
-            return "Logico"  # bool antes de int (bool es subclase de int)
+            return "Logico"
         if isinstance(valor, int):
             return "Entero"
         if isinstance(valor, float):
@@ -100,7 +99,7 @@ class TablaDeSimbolos:
         self.tabla = {}
         self.errores = []
 
-    # ── Representación visual ──────────────────────────────────────────────────
+    # Representación visual
 
     def mostrar(self) -> str:
         """Retorna la tabla de símbolos formateada como texto."""

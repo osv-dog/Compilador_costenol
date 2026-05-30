@@ -9,9 +9,6 @@ from core.simbolos import ErrorCompilacion, TablaDeSimbolos
 tabla = TablaDeSimbolos()
 salida_programa: list[str] = []
 
-# ── Helpers para AST y evaluación ────────────────────────────────────────────
-
-
 def tipo_expresion(expr):
     if expr is None:
         return None
@@ -179,7 +176,7 @@ def ejecutar_ast(ast):
     return
 
 
-# ── Precedencia de operadores (menor → mayor prioridad) ───────────────────────
+# Precedencia de operadores
 precedence = (
     ("left", "O"),
     ("left", "Y"),
@@ -197,15 +194,14 @@ precedence = (
     ("left", "POR", "ENTRE"),
 )
 
-# Patrones para detectar sentencias incompletas (sin punto y coma)
+# Patrones para detectar sentencias incompletas
 _PATRON_ID_SUELTO    = re.compile(r'^[A-Za-z_]\w*$')
 _PATRON_DECLARACION  = re.compile(r'^([A-Za-z_]\w*)\s+(Entero|Real|Texto|Logico)$')
 _PATRON_ASIGNACION   = re.compile(r'^[A-Za-z_]\w*\s*=\s*.+[^;]$')
 _PATRON_CAPTURA_SOLA = re.compile(r'^Captura\s*\.\s*\w+\s*\(\s*\)\s*;$')
 
 
-# ── Captura de datos en tiempo de ejecución ───────────────────────────────────
-
+# Captura de datos en tiempo de ejecución
 
 def pedir_captura(tipo: str):
     """Abre un diálogo de tkinter para leer un valor del tipo indicado."""
@@ -232,7 +228,7 @@ def pedir_captura(tipo: str):
     return None
 
 
-# ── Pre-validación de sentencias incompletas ──────────────────────────────────
+# Pre-validación de sentencias incompletas
 
 
 def validar_sentencias_incompletas(codigo: str) -> str:
@@ -251,14 +247,11 @@ def validar_sentencias_incompletas(codigo: str) -> str:
         contenido = linea.strip()
         salto = '\n' if linea.endswith('\n') else ''
 
-        # Línea vacía o comentario — pasar siempre
         if not contenido or contenido.startswith('//'):
             lineas_limpias.append(linea)
             continue
 
-        # Captura sin asignación: Captura.Texto(); sin variable = ...
         if _PATRON_CAPTURA_SOLA.fullmatch(contenido):
-            # Extraer lo que escribieron después del punto
             tipo_escrito = re.search(r'Captura\s*\.\s*(\w+)', contenido).group(1)
             tipos_validos = {"Entero", "Real", "Texto", "Logico"}
 
@@ -277,7 +270,6 @@ def validar_sentencias_incompletas(codigo: str) -> str:
             lineas_limpias.append(salto)
             continue
 
-        # Declaración sin ';': 'num1 Entero'
         if _PATRON_DECLARACION.fullmatch(contenido):
             tabla._error(
                 f"Falta ';' al final de la declaración: '{contenido}'",
@@ -286,7 +278,6 @@ def validar_sentencias_incompletas(codigo: str) -> str:
             lineas_limpias.append(salto)
             continue
 
-        # Asignación sin ';': 'num1 = 5'
         if _PATRON_ASIGNACION.fullmatch(contenido):
             tabla._error(
                 f"Falta ';' al final de la asignación: '{contenido}'",
@@ -295,7 +286,6 @@ def validar_sentencias_incompletas(codigo: str) -> str:
             lineas_limpias.append(salto)
             continue
 
-        # Identificador suelto: 'nombre' solo en la línea
         if _PATRON_ID_SUELTO.fullmatch(contenido):
             tabla._error(
                 f"Sentencia incompleta: '{contenido}' no es una declaración ni una asignación",
@@ -304,13 +294,12 @@ def validar_sentencias_incompletas(codigo: str) -> str:
             lineas_limpias.append(salto)
             continue
 
-        # Línea válida — pasa al parser
         lineas_limpias.append(linea)
 
     return ''.join(lineas_limpias)
 
 
-# ── Gramática ─────────────────────────────────────────────────────────────────
+# Gramática
 
 
 def p_programa(p):
@@ -421,7 +410,6 @@ def p_asignacion_captura(p):
         p[0] = ("captura_asignacion_error", nombre)
         return
 
-    # Solo registra la intención — pedir_captura() se llama al ejecutar
     p[0] = ("captura_asignacion", nombre, tipo_captura)
 
 
@@ -430,7 +418,7 @@ def p_captura(p):
     p[0] = p[3]
 
 
-# ── Impresión ─────────────────────────────────────────────────────────────────
+#Impresión
 
 
 def p_impresion(p):
@@ -458,7 +446,7 @@ def p_argumento_id(p):
     p[0] = ("id_ref", p[1])
 
 
-# ── Expresiones ───────────────────────────────────────────────────────────────
+#Expresiones
 
 
 def p_expresion_logica(p):
@@ -551,7 +539,7 @@ def p_factor_paren(p):
     p[0] = p[2]
 
 
-# ── Error sintáctico ──────────────────────────────────────────────────────────
+#Error sintáctico
 
 
 def p_error(p):
@@ -566,12 +554,10 @@ def p_error(p):
             "posiblemente falta ';' al final de la última sentencia"
         )
 
-
-# Instancia global del parser
 parser = yacc.yacc(write_tables=False)
 
 
-# ── Punto de entrada ──────────────────────────────────────────────────────────
+#Punto de entrada
 
 
 def compilar(codigo: str, ejecutar: bool = False) -> dict:
@@ -587,15 +573,11 @@ def compilar(codigo: str, ejecutar: bool = False) -> dict:
     salida_programa.clear()
     lexer.lineno = 1
 
-    # Pre-validación: detecta errores de forma antes del parser.
-    # Usa continue internamente para analizar TODAS las líneas,
     codigo_limpio = validar_sentencias_incompletas(codigo)
     lexer.lineno = 1
 
-    # para recolectar todos los errores posibles en un solo paso.
     ast = parser.parse(codigo_limpio, lexer=lexer)
 
-    # Así compilar y ejecutar son dos acciones separadas.
     if ejecutar and not tabla.tiene_errores() and ast is not None:
         ejecutar_ast(ast)
 

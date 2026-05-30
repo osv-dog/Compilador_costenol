@@ -1,4 +1,4 @@
-# core/lexer.py — Analizador Léxico del compilador Costeñol
+#lexer.py — Analizador Léxico del compilador Costeñol
 import ply.lex as lex
 
 tokens = (
@@ -46,10 +46,9 @@ palabras_reservadas = {
     "Captura": "CAPTURA",
 }
 
-# Set de palabras reservadas en minúsculas — usado por el parser para sugerir correcciones
 palabras_reservadas_minusculas = {p.lower() for p in palabras_reservadas}
 
-# ── Operadores simples (sin ambigüedad de prefijo) ────────────────────────────
+
 t_MAS = r"\+"
 t_MENOS = r"-"
 t_POR = r"\*"
@@ -60,12 +59,6 @@ t_PAREN_IZQ = r"\("
 t_PAREN_DER = r"\)"
 t_Y = r"&&"
 t_O = r"\|\|"
-
-# ── Operadores con prefijo compartido — DEBEN ser funciones y en este orden ───
-# PLY da prioridad a las funciones sobre las cadenas simples.
-# Dentro de las funciones, el orden en el archivo determina cuál se intenta primero.
-# Los de 2 caracteres (!=, ==, <=, >=) van ANTES que los de 1 carácter (!, =, <, >).
-
 
 def t_DIFERENTE(t):
     r"!="
@@ -139,7 +132,7 @@ def t_ID(t):
 
 def t_COMENTARIO(t):
     r"//[^\n]*"
-    pass  # Ignorar comentarios de línea — no devuelve token
+    pass
 
 
 def t_newline(t):
@@ -147,7 +140,7 @@ def t_newline(t):
     t.lexer.lineno += len(t.value)
 
 
-t_ignore = " \t\r"  # ignora espacios, tabs y retornos de carro
+t_ignore = " \t\r"
 
 
 def t_error(t):
@@ -164,6 +157,6 @@ def tokenizar(codigo: str) -> list[tuple]:
     Recibe código fuente Costeñol y retorna la lista de tokens como tuplas:
         (tipo, valor, número_de_línea)
     """
-    lexer.lineno = 1  # reiniciar contador de líneas en cada llamada
+    lexer.lineno = 1
     lexer.input(codigo)
     return [(tok.type, tok.value, tok.lineno) for tok in lexer]
