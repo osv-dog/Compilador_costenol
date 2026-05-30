@@ -180,4 +180,4 @@ Los programas Costeñol usan la extensión `.pqek`.
 Materia: Compiladores  
 Lenguaje de implementación: Python 
 Librerías: PLY y PyQt6
-Integrantes: Stiven Amorocho, Jose Angarita y Osvaldo Ospino
+# Integrantes: Stiven Amorocho, Jose Angarita y Osvaldo Ospino
